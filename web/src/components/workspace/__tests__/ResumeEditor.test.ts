@@ -400,15 +400,15 @@ describe('ResumeEditor', () => {
     expect(wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded')).toBe('false')
     expect(wrapper.get('[data-section-id="s3"] .section-collapse-toggle').attributes('aria-expanded')).toBe('true')
 
-    const moveDown = wrapper.get('[data-section-id="s1"] .section-more-menu button:nth-of-type(3)')
-    await moveDown.trigger('click')
-    expect((onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id)).toEqual(['s2', 's1', 's3'])
-    await wrapper.setProps({ document: onChange.mock.lastCall![0] as ResumeDocument })
+    await wrapper.get('[data-section-id="s1"]').trigger('keydown', { key: 'ArrowDown', altKey: true })
+    const reordered = onChange.mock.lastCall![0] as ResumeDocument
+    expect(reordered.sections.map((section) => section.id)).toEqual(['s2', 's1', 's3'])
+    await wrapper.setProps({ document: reordered })
     await nextTick()
     expect(wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded')).toBe('false')
     expect(wrapper.get('[data-section-id="s3"] .section-collapse-toggle').attributes('aria-expanded')).toBe('true')
 
-    const withoutS1 = JSON.parse(JSON.stringify(onChange.mock.lastCall![0])) as ResumeDocument
+    const withoutS1 = JSON.parse(JSON.stringify(reordered)) as ResumeDocument
     withoutS1.sections = withoutS1.sections.filter((section) => section.id !== 's1')
     await wrapper.setProps({ document: withoutS1 })
     await nextTick()
@@ -419,6 +419,110 @@ describe('ResumeEditor', () => {
     await wrapper.setProps({ document: restored })
     await nextTick()
     expect(wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded')).toBe('true')
+  })
+
+  it('reorders a section only after a desktop hold-drag and emits one document update', async () => {
+    vi.useFakeTimers()
+    const document = makeDocument()
+    document.sections.push({ id: 's2', kind: 'PROJECT', title: '项目经历', entries: [] })
+    const onChange = vi.fn()
+    const wrapper = mount(ResumeEditor, { props: { document, onChange } })
+    const firstSection = wrapper.get('[data-section-id="s1"]')
+    const secondSection = wrapper.get('[data-section-id="s2"]')
+    const originalRect = HTMLElement.prototype.getBoundingClientRect
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      if (this.getAttribute('data-section-id') === 's1') {
+        return { top: 0, bottom: 100, height: 100, left: 0, right: 500, width: 500, x: 0, y: 0, toJSON: () => ({}) }
+      }
+      if (this.getAttribute('data-section-id') === 's2') {
+        return { top: 120, bottom: 220, height: 100, left: 0, right: 500, width: 500, x: 0, y: 120, toJSON: () => ({}) }
+      }
+      return originalRect.call(this)
+    })
+
+    expect(wrapper.find('.section-drag-handle').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('上移')
+    expect(wrapper.text()).not.toContain('下移')
+    const dispatchPointer = (type: string, target: EventTarget, values: Record<string, unknown>) => {
+      const event = new Event(type, { bubbles: true, cancelable: true })
+      Object.defineProperties(event, values)
+      target.dispatchEvent(event)
+    }
+    dispatchPointer('pointerdown', firstSection.element, {
+      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 1 },
+      clientX: { value: 12 }, clientY: { value: 20 },
+    })
+    dispatchPointer('pointerup', firstSection.element, {
+      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 1 },
+      clientX: { value: 12 }, clientY: { value: 20 },
+    })
+    expect(onChange).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+
+    const textarea = firstSection.get('textarea')
+    dispatchPointer('pointerdown', textarea.element, {
+      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 2 },
+      clientX: { value: 12 }, clientY: { value: 20 },
+    })
+    await vi.advanceTimersByTimeAsync(230)
+    await nextTick()
+    expect(firstSection.classes()).not.toContain('is-reorder-source')
+    dispatchPointer('pointerup', textarea.element, {
+      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 2 },
+      clientX: { value: 12 }, clientY: { value: 20 },
+    })
+
+    dispatchPointer('pointerdown', firstSection.element, {
+      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 3 },
+      clientX: { value: 12 }, clientY: { value: 20 },
+    })
+    await vi.advanceTimersByTimeAsync(230)
+    await nextTick()
+    dispatchPointer('pointerup', firstSection.element, {
+      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 3 },
+      clientX: { value: 12 }, clientY: { value: 20 },
+    })
+    expect(onChange).not.toHaveBeenCalled()
+
+    dispatchPointer('pointerdown', firstSection.element, {
+      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 1 },
+      clientX: { value: 12 }, clientY: { value: 20 },
+    })
+    expect(vi.getTimerCount()).toBe(1)
+    await vi.advanceTimersByTimeAsync(230)
+    await nextTick()
+    expect(firstSection.classes()).toContain('is-reorder-source')
+    const move = new Event('pointermove', { bubbles: true, cancelable: true })
+    Object.defineProperties(move, { clientX: { value: 20 }, clientY: { value: 210 } })
+    window.dispatchEvent(move)
+    await nextTick()
+    expect(secondSection.classes()).toContain('is-drop-after')
+    const drop = new Event('pointerup', { bubbles: true, cancelable: true })
+    Object.defineProperties(drop, { clientX: { value: 20 }, clientY: { value: 210 } })
+    window.dispatchEvent(drop)
+    await nextTick()
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect((onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id)).toEqual(['s2', 's1'])
+    expect((onChange.mock.lastCall![0] as ResumeDocument).sections[1]?.entries[0]?.bullets[0]?.id).toBe('b1')
+    wrapper.unmount()
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('supports keyboard section reorder without exposing a sorting control', async () => {
+    const document = makeDocument()
+    document.sections.push({ id: 's2', kind: 'PROJECT', title: '项目经历', entries: [] })
+    const onChange = vi.fn()
+    const wrapper = mount(ResumeEditor, { props: { document, onChange } })
+    const firstSection = wrapper.get('[data-section-id="s1"]')
+
+    expect(firstSection.attributes('tabindex')).toBe('0')
+    await firstSection.trigger('keydown', { key: 'ArrowDown', altKey: true })
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect((onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id)).toEqual(['s2', 's1'])
+    expect(wrapper.text()).not.toContain('拖动排序')
   })
 
   it('exits contextual name editing with Escape', async () => {

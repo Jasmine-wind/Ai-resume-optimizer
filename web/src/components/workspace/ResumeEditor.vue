@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type {
   ResumeDocument,
   ResumeDocumentBasics,
@@ -65,7 +65,26 @@ const visibleContacts = computed(() =>
   compactContactRows(props.document.basics.contacts ?? []),
 )
 
+const SECTION_REORDER_HOLD_DELAY_MS = 220
+const SECTION_REORDER_MOVE_THRESHOLD = 6
+
+type SectionReorderIntent = {
+  sectionId: string
+  pointerId: number
+  startX: number
+  startY: number
+  clientX: number
+  clientY: number
+  timer: number | null
+  active: boolean
+}
+
+const sectionReorderIntent = ref<SectionReorderIntent | null>(null)
 const draggedSectionId = ref<string | null>(null)
+const dropSectionId = ref<string | null>(null)
+const dropBefore = ref(false)
+const reorderAnnouncement = ref('')
+let autoScrollFrame: number | null = null
 const editingName = ref(false)
 const editingContactId = ref<string | null>(null)
 const editingSectionTitle = ref<string | null>(null)
@@ -243,26 +262,190 @@ const moveSection = (index: number, delta: number) => {
   })
 }
 
-const startSectionDrag = (sectionId: string, event: DragEvent) => {
-  draggedSectionId.value = sectionId
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', sectionId)
-  }
+const isInteractiveReorderTarget = (target: EventTarget | null) => {
+  return target instanceof Element && Boolean(
+    target.closest(
+      'input, textarea, button, a, select, summary, .el-input, .el-input__wrapper, .el-textarea, [role="textbox"], [contenteditable="true"], [contenteditable=""], [role="button"]',
+    ),
+  )
 }
 
-const dropSection = (targetSectionId: string) => {
-  const sourceSectionId = draggedSectionId.value
+const clearSectionReorder = () => {
+  const intent = sectionReorderIntent.value
+  if (intent?.timer !== null && intent?.timer !== undefined) window.clearTimeout(intent.timer)
+  if (autoScrollFrame !== null) {
+    window.cancelAnimationFrame(autoScrollFrame)
+    autoScrollFrame = null
+  }
+  sectionReorderIntent.value = null
   draggedSectionId.value = null
-  if (!sourceSectionId || sourceSectionId === targetSectionId) return
-  mutate((doc) => {
-    const sourceIndex = doc.sections.findIndex((section) => section.id === sourceSectionId)
-    const targetIndex = doc.sections.findIndex((section) => section.id === targetSectionId)
-    if (sourceIndex < 0 || targetIndex < 0) return
-    const [section] = doc.sections.splice(sourceIndex, 1)
-    if (section) doc.sections.splice(targetIndex, 0, section)
-  })
+  dropSectionId.value = null
+  dropBefore.value = false
 }
+
+const setDropTarget = (clientY: number) => {
+  const sourceId = draggedSectionId.value
+  if (!sourceId || !editorRoot.value) return
+  const sections = Array.from(
+    editorRoot.value.querySelectorAll<HTMLElement>('.editor-section[data-section-id]'),
+  ).filter((section) => section.dataset.sectionId !== sourceId)
+  if (sections.length === 0) {
+    dropSectionId.value = null
+    return
+  }
+
+  let nextTarget = sections[sections.length - 1]
+  let insertBefore = false
+  for (const section of sections) {
+    const rect = section.getBoundingClientRect()
+    if (clientY < rect.top + rect.height / 2) {
+      nextTarget = section
+      insertBefore = true
+      break
+    }
+  }
+  dropSectionId.value = nextTarget?.dataset.sectionId ?? null
+  dropBefore.value = insertBefore
+}
+
+const updateAutoScroll = (clientY: number) => {
+  const container = editorRoot.value?.closest<HTMLElement>('.resume-stage-scroll')
+  const intent = sectionReorderIntent.value
+  if (!container || !intent?.active) return
+  const rect = container.getBoundingClientRect()
+  const edge = Math.min(80, Math.max(48, rect.height * 0.14))
+  const direction = clientY < rect.top + edge ? -1 : clientY > rect.bottom - edge ? 1 : 0
+  if (direction === 0) {
+    if (autoScrollFrame !== null) {
+      window.cancelAnimationFrame(autoScrollFrame)
+      autoScrollFrame = null
+    }
+    return
+  }
+  if (autoScrollFrame !== null) return
+
+  const scroll = () => {
+    const current = sectionReorderIntent.value
+    if (!current?.active) {
+      autoScrollFrame = null
+      return
+    }
+    const currentContainer = editorRoot.value?.closest<HTMLElement>('.resume-stage-scroll')
+    if (!currentContainer) {
+      autoScrollFrame = null
+      return
+    }
+    const currentRect = currentContainer.getBoundingClientRect()
+    const currentDirection = current.clientY < currentRect.top + edge
+      ? -1
+      : current.clientY > currentRect.bottom - edge
+        ? 1
+        : 0
+    if (currentDirection === 0) {
+      autoScrollFrame = null
+      return
+    }
+    currentContainer.scrollTop += currentDirection * 6
+    setDropTarget(current.clientY)
+    autoScrollFrame = window.requestAnimationFrame(scroll)
+  }
+  autoScrollFrame = window.requestAnimationFrame(scroll)
+}
+
+const handleSectionPointerDown = (sectionId: string, event: PointerEvent) => {
+  if (
+    (event.pointerType && event.pointerType !== 'mouse') ||
+    (event.button !== undefined && event.button !== 0) ||
+    isInteractiveReorderTarget(event.target)
+  ) return
+  clearSectionReorder()
+  const intent: SectionReorderIntent = {
+    sectionId,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    timer: null,
+    active: false,
+  }
+  intent.timer = window.setTimeout(() => {
+    const current = sectionReorderIntent.value
+    if (!current || Math.hypot(current.clientX - current.startX, current.clientY - current.startY) > SECTION_REORDER_MOVE_THRESHOLD) return
+    current.active = true
+    draggedSectionId.value = current.sectionId
+    setDropTarget(current.clientY)
+  }, SECTION_REORDER_HOLD_DELAY_MS)
+  sectionReorderIntent.value = intent
+}
+
+const handleSectionPointerMove = (event: PointerEvent) => {
+  const intent = sectionReorderIntent.value
+  if (!intent || (event.pointerId && event.pointerId !== intent.pointerId)) return
+  intent.clientX = event.clientX
+  intent.clientY = event.clientY
+  if (!intent.active) {
+    if (Math.hypot(intent.clientX - intent.startX, intent.clientY - intent.startY) > SECTION_REORDER_MOVE_THRESHOLD) {
+      clearSectionReorder()
+    }
+    return
+  }
+  event.preventDefault()
+  setDropTarget(intent.clientY)
+  updateAutoScroll(intent.clientY)
+}
+
+const finishSectionReorder = () => {
+  const intent = sectionReorderIntent.value
+  if (!intent?.active || !draggedSectionId.value || !dropSectionId.value) {
+    clearSectionReorder()
+    return
+  }
+
+  const sourceId = draggedSectionId.value
+  const targetId = dropSectionId.value
+  const insertBefore = dropBefore.value
+  const source = props.document.sections.find((section) => section.id === sourceId)
+  const sourceTitle = source ? sectionTitle(source) : ''
+  const sourceIndex = props.document.sections.findIndex((section) => section.id === sourceId)
+  const targetIndex = props.document.sections.findIndex((candidate) => candidate.id === targetId)
+  const targetIndexAfterRemoval = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
+  const nextIndex = insertBefore ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1
+  if (!source || sourceId === targetId || sourceIndex < 0 || targetIndex < 0 || nextIndex === sourceIndex) {
+    clearSectionReorder()
+    return
+  }
+
+  mutate((doc) => {
+    const [section] = doc.sections.splice(sourceIndex, 1)
+    if (section) doc.sections.splice(nextIndex, 0, section)
+  })
+  clearSectionReorder()
+  reorderAnnouncement.value = `已将${sourceTitle}移动到第 ${nextIndex + 1} 项`
+}
+
+const handleSectionKeydown = (sectionId: string, index: number, event: KeyboardEvent) => {
+  if (event.target !== event.currentTarget || !event.altKey || event.ctrlKey || event.metaKey) return
+  const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0
+  if (delta === 0 || index + delta < 0 || index + delta >= props.document.sections.length) return
+  event.preventDefault()
+  const section = props.document.sections.find((candidate) => candidate.id === sectionId)
+  moveSection(index, delta)
+  if (section) reorderAnnouncement.value = `已将${sectionTitle(section)}移动到第 ${index + delta + 1} 项`
+}
+
+onMounted(() => {
+  window.addEventListener('pointermove', handleSectionPointerMove)
+  window.addEventListener('pointerup', finishSectionReorder)
+  window.addEventListener('pointercancel', clearSectionReorder)
+})
+
+onBeforeUnmount(() => {
+  clearSectionReorder()
+  window.removeEventListener('pointermove', handleSectionPointerMove)
+  window.removeEventListener('pointerup', finishSectionReorder)
+  window.removeEventListener('pointercancel', clearSectionReorder)
+})
 
 const setContactType = (contactId: string, type: string) => {
   updateBasics((basics) => {
@@ -577,10 +760,23 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
       :key="section.id"
       class="editor-block editor-section"
       :data-section-id="section.id"
-      :class="{ 'is-collapsed': !isSectionExpanded(section.id), 'is-focused': props.selectedSectionId === section.id }"
+      :class="{
+        'is-collapsed': !isSectionExpanded(section.id),
+        'is-focused': props.selectedSectionId === section.id,
+        'is-reorder-source': draggedSectionId === section.id,
+        'is-drop-before': dropSectionId === section.id && dropBefore,
+        'is-drop-after': dropSectionId === section.id && !dropBefore,
+      }"
       :ref="(element) => setSectionRef(section.id, element)"
-      @dragover.prevent
-      @drop.prevent="dropSection(section.id)"
+      role="group"
+      tabindex="0"
+      :aria-label="`${sectionTitle(section)}，第 ${sectionIndex + 1} 项`"
+      aria-describedby="resume-reorder-help"
+      aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+      @pointerdown="handleSectionPointerDown(section.id, $event)"
+      @pointerup="finishSectionReorder"
+      @pointercancel="clearSectionReorder"
+      @keydown="handleSectionKeydown(section.id, sectionIndex, $event)"
     >
       <header class="editor-block-header">
         <button
@@ -622,37 +818,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
           </button>
         </div>
         <span class="section-entry-count">{{ section.entries.length }} 段</span>
-        <details class="section-more">
-          <summary aria-label="章节操作">···</summary>
-          <div class="section-more-menu">
-            <button
-              class="section-drag-handle"
-              type="button"
-              draggable="true"
-              :aria-label="`拖拽调整${sectionTitle(section)}顺序`"
-              @dragstart="startSectionDrag(section.id, $event)"
-              @dragend="draggedSectionId = null"
-            >
-              拖动排序
-            </button>
-            <button
-              type="button"
-              :aria-label="`上移${sectionTitle(section)}`"
-              :disabled="sectionIndex === 0"
-              @click="moveSection(sectionIndex, -1)"
-            >
-              上移
-            </button>
-            <button
-              type="button"
-              :aria-label="`下移${sectionTitle(section)}`"
-              :disabled="sectionIndex === document.sections.length - 1"
-              @click="moveSection(sectionIndex, 1)"
-            >
-              下移
-            </button>
-          </div>
-        </details>
       </header>
 
       <div v-if="isSectionExpanded(section.id)" :id="`editor-section-${section.id}`" class="editor-section-content">
@@ -1094,6 +1259,8 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
     </section>
     <div class="resume-page-footer"><span>当前版本由你确认</span><span>编辑内容会自动保存</span></div>
     </div>
+    <p id="resume-reorder-help" class="sr-only">聚焦章节后使用 Alt 加上、下方向键调整顺序。</p>
+    <div class="sr-only" aria-live="polite">{{ reorderAnnouncement }}</div>
   </div>
 </template>
 
@@ -1235,7 +1402,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 .entry-optional-fields summary,
 .inline-more summary,
-.section-more summary,
 .entry-more summary {
   width: fit-content;
   color: var(--app-primary);
@@ -1281,26 +1447,22 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   width: min(560px, 100%);
 }
 
-.section-more,
 .entry-more,
 .inline-more {
   position: relative;
   flex: 0 0 auto;
 }
 
-.section-more summary,
 .entry-more summary,
 .inline-more summary {
   list-style: none;
 }
 
-.section-more summary::-webkit-details-marker,
 .entry-more summary::-webkit-details-marker,
 .inline-more summary::-webkit-details-marker {
   display: none;
 }
 
-.section-more-menu,
 .entry-more-menu,
 .inline-more-menu {
   position: absolute;
@@ -1317,7 +1479,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   box-shadow: var(--app-shadow-soft);
 }
 
-.section-more-menu button,
 .entry-more-menu button,
 .inline-more-menu button {
   border: 0;
@@ -1330,27 +1491,12 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   cursor: pointer;
 }
 
-.section-more-menu button:hover,
-.section-more-menu button:focus-visible,
 .entry-more-menu button:hover,
 .entry-more-menu button:focus-visible,
 .inline-more-menu button:hover,
 .inline-more-menu button:focus-visible {
   color: var(--app-text);
   background: var(--app-surface-soft);
-}
-
-.section-more-menu button:disabled {
-  color: var(--app-text-muted);
-  cursor: not-allowed;
-}
-
-.section-drag-handle {
-  cursor: grab !important;
-}
-
-.section-drag-handle:active {
-  cursor: grabbing !important;
 }
 
 .editor-empty {
@@ -2006,7 +2152,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   white-space: nowrap;
 }
 
-.section-more summary,
 .entry-more summary,
 .inline-more summary {
   min-width: 20px;
@@ -2017,8 +2162,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   text-align: center;
 }
 
-.section-more summary:hover,
-.section-more summary:focus-visible,
 .entry-more summary:hover,
 .entry-more summary:focus-visible,
 .inline-more summary:hover,
@@ -2035,6 +2178,66 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 .editor-section.is-focused {
   scroll-margin-top: 20px;
+}
+
+.editor-section {
+  position: relative;
+  cursor: grab;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.editor-section :deep(input),
+.editor-section :deep(textarea),
+.editor-section :deep(.el-input),
+.editor-section :deep(.el-input__wrapper),
+.editor-section :deep(.el-textarea),
+.editor-section [role='textbox'],
+.editor-section button,
+.editor-section a,
+.editor-section select,
+.editor-section summary,
+.editor-section [contenteditable='true'] {
+  cursor: text;
+}
+
+.editor-section button,
+.editor-section a,
+.editor-section select,
+.editor-section summary {
+  cursor: pointer;
+}
+
+.editor-section.is-reorder-source,
+.editor-section.is-reorder-source * {
+  cursor: grabbing !important;
+}
+
+.editor-section.is-reorder-source {
+  user-select: none;
+  background: color-mix(in srgb, var(--app-primary-soft) 44%, transparent);
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--app-text) 10%, transparent);
+}
+
+.editor-section.is-drop-before::before,
+.editor-section.is-drop-after::after {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--app-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-primary) 14%, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+.editor-section.is-drop-before::before {
+  top: -1px;
+}
+
+.editor-section.is-drop-after::after {
+  bottom: -1px;
 }
 
 .editor-section-content {

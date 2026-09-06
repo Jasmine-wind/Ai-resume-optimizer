@@ -11,6 +11,23 @@ const ElButton = {
 }
 
 describe('BulletSuggestionCard', () => {
+  it('explains a fact-check rejection and keeps both next steps visible', () => {
+    const wrapper = mount(BulletSuggestionCard, {
+      props: {
+        mode: 'rejected',
+        originalText: '参与 Redis 优化。',
+        rejectCode: 'NEW_TECHNOLOGY',
+        rejectMessage: '改写引入了原文没有的技术名称',
+      },
+      global: { stubs: { ElButton } },
+    })
+
+    expect(wrapper.text()).toContain('这条建议没有通过事实校验')
+    expect(wrapper.text()).toContain('引入原文没有的信息')
+    expect(wrapper.text()).toContain('重新生成建议')
+    expect(wrapper.text()).toContain('继续手工编辑')
+  })
+
   it('shows original, suggested expression, deterministic diff and apply action together', async () => {
     const wrapper = mount(BulletSuggestionCard, {
       props: {

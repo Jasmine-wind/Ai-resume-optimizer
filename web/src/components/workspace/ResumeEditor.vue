@@ -23,6 +23,8 @@ const props = defineProps<{
   suggestLocked?: boolean
   selectedSectionId?: string | null
   focusedBulletId?: string | null
+  /** 同一目标再次点击时递增，确保仍能重新滚动到上下文。 */
+  focusRequestKey?: number
 }>()
 
 const emit = defineEmits<{
@@ -140,7 +142,7 @@ const syncSelectedSection = async () => {
 }
 
 watch(
-  () => [props.selectedSectionId, props.focusedBulletId] as const,
+  () => [props.selectedSectionId, props.focusedBulletId, props.focusRequestKey] as const,
   () => void syncSelectedSection(),
   { immediate: true },
 )
@@ -1715,7 +1717,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   width: min(820px, 100%);
   min-height: 0;
   margin: 0 auto;
-  padding: 24px 40px 30px;
+  padding: 26px 40px 32px;
+  border-color: var(--app-border-strong);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--app-text) 8%, transparent);
 }
 
 .resume-page-meta {
@@ -2024,9 +2028,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 }
 
 .editor-section.is-focused > .editor-block-header {
-  background: transparent;
-  box-shadow: inset 2px 0 0 var(--app-primary);
-  padding-left: 7px;
+  background: color-mix(in srgb, var(--app-focus-soft) 42%, transparent);
+  box-shadow: inset 3px 0 0 var(--app-focus);
+  padding: 5px 7px;
 }
 
 .editor-section.is-focused {
@@ -2160,11 +2164,13 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 }
 
 .bullet-block.is-evidence-focus {
-  margin: -3px 0 -3px -8px;
-  padding: 3px 0 3px 8px;
-  border: 0;
-  border-left: 2px solid var(--app-primary);
-  background: color-mix(in srgb, var(--app-primary-soft) 35%, transparent);
+  margin: -4px 0 -4px -10px;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid color-mix(in srgb, var(--app-focus) 38%, var(--app-border));
+  border-left: 3px solid var(--app-focus);
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-focus-soft) 58%, var(--app-surface));
+  animation: resume-focus-pulse 1.6s ease-out both;
 }
 
 .bullet-line {
@@ -2243,6 +2249,17 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 .entry-actions :deep(.el-button:hover),
 .section-footer :deep(.el-button:hover) {
   color: var(--app-primary-active);
+}
+
+@keyframes resume-focus-pulse {
+  0% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-focus) 18%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bullet-block.is-evidence-focus {
+    animation: none;
+  }
 }
 
 @media (max-width: 760px) {

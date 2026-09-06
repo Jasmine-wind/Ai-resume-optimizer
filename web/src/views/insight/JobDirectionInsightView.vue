@@ -38,7 +38,7 @@ const coverageLabel = (level: EvidenceCoverageLevel) => {
     case 'MATCHED':
       return '已有优势'
     case 'PARTIAL_EVIDENCE':
-      return '建议完善'
+      return '可强化表达'
     case 'NO_EVIDENCE':
       return '当前材料未体现'
   }
@@ -161,7 +161,7 @@ onMounted(() => {
                 </span>
                 <span class="insight-requirement-distribution">
                   <span v-if="requirement.matchedCount" class="is-matched">已有优势 {{ requirement.matchedCount }}</span>
-                  <span v-if="requirement.partialEvidenceCount" class="is-partial">建议完善 {{ requirement.partialEvidenceCount }}</span>
+                  <span v-if="requirement.partialEvidenceCount" class="is-partial">可强化表达 {{ requirement.partialEvidenceCount }}</span>
                   <span v-if="requirement.noEvidenceCount" class="is-missing">当前材料未体现 {{ requirement.noEvidenceCount }}</span>
                 </span>
               </button>
@@ -181,7 +181,7 @@ onMounted(() => {
               <span class="trace-label">当时材料的支持情况</span>
               <div class="trace-counts">
                 <span class="is-matched">已有优势 {{ selectedRequirement(selectedCohort)?.matchedCount }}</span>
-                <span class="is-partial">建议完善 {{ selectedRequirement(selectedCohort)?.partialEvidenceCount }}</span>
+                <span class="is-partial">可强化表达 {{ selectedRequirement(selectedCohort)?.partialEvidenceCount }}</span>
                 <span class="is-missing">当前材料未体现 {{ selectedRequirement(selectedCohort)?.noEvidenceCount }}</span>
               </div>
             </section>

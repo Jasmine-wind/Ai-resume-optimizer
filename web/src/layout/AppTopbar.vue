@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import ProductMark from '@/components/common/ProductMark.vue'
 
 defineProps<{
   menuOpen?: boolean
@@ -73,7 +74,7 @@ const handleAccountCommand = (command: string) => {
         <span class="app-menu-label">菜单</span>
       </button>
       <RouterLink to="/app" class="app-topbar-brand" aria-label="简历优化首页">
-        <span class="app-sidebar-mark" aria-hidden="true">CV</span>
+        <ProductMark size="sm" />
         <span>简历优化</span>
       </RouterLink>
       <nav class="app-topbar-nav" aria-label="主导航">

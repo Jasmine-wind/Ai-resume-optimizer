@@ -36,7 +36,7 @@ public class EvidenceMatchOutputParserImpl implements EvidenceMatchOutputParser 
     private static final String PARTIAL_EVIDENCE_CONCLUSION =
             "当前材料中有相关证据，但还不足以完整支持这条要求。";
     private static final String PARTIAL_EVIDENCE_SUGGESTION =
-            "建议完善材料中已有的相关内容；新增技术、数字或成果前必须先由用户确认真实事实。";
+            "可强化材料中已有的相关表达；新增技术、数字或成果前必须先由用户确认真实事实。";
     private static final String NO_EVIDENCE_CONCLUSION = "当前材料中没有找到支持这条要求的证据。";
     private static final String NO_EVIDENCE_SUGGESTION =
             "如确有相关事实，请由用户补充或确认；在此之前不得写入简历。";

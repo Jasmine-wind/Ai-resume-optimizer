@@ -15,7 +15,7 @@ const statusLabel = (matchLevel: string) => {
     case 'MATCHED':
       return '已有优势'
     case 'PARTIAL_EVIDENCE':
-      return '建议完善'
+      return '可强化表达'
     case 'NO_EVIDENCE':
       return '当前材料未体现'
     default:
@@ -55,7 +55,10 @@ const countByStatus = (matchLevel: string) =>
         :key="requirement.evidenceRequirementId"
         type="button"
         class="requirement-item"
-        :class="{ 'is-selected': requirement.evidenceRequirementId === selectedRequirementId }"
+        :class="[
+          statusClass(requirement.matchLevel),
+          { 'is-selected': requirement.evidenceRequirementId === selectedRequirementId },
+        ]"
         :aria-pressed="requirement.evidenceRequirementId === selectedRequirementId"
         @click="emit('select', requirement.evidenceRequirementId)"
       >
@@ -169,7 +172,19 @@ const countByStatus = (matchLevel: string) =>
 }
 
 .requirement-item.is-selected {
-  background: var(--app-primary-soft);
+  background: color-mix(in srgb, var(--app-primary-soft) 78%, var(--app-surface));
+}
+
+.requirement-item.is-supported:not(.is-selected) {
+  background: color-mix(in srgb, var(--app-status-supported-soft) 36%, transparent);
+}
+
+.requirement-item.is-needs-edit:not(.is-selected) {
+  background: color-mix(in srgb, var(--app-status-partial-soft) 30%, transparent);
+}
+
+.requirement-item.is-gap:not(.is-selected) {
+  background: color-mix(in srgb, var(--app-status-gap-soft) 24%, transparent);
 }
 
 .requirement-item.is-selected::before {

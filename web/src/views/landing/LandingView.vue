@@ -5,6 +5,7 @@ import ProductFlowDemo from '@/components/brand/ProductFlowDemo.vue'
 import { createPresentationGestureController } from '@/utils/useSlideGestureController'
 import FinalResumeArtifact from './FinalResumeArtifact.vue'
 import LandingResumePaper from './LandingResumePaper.vue'
+import ProductMark from '@/components/common/ProductMark.vue'
 import { LANDING_DEMO_STAGES, type LandingDemoStageId } from './landingDemoStages'
 
 const router = useRouter()
@@ -216,7 +217,7 @@ onBeforeUnmount(() => {
     -->
     <header class="landing-nav">
       <RouterLink to="/" class="landing-brand" aria-label="CV Role 首页">
-        <span>CV</span>
+        <ProductMark size="md" />
         <strong>简历优化</strong>
       </RouterLink>
       <nav class="landing-nav-actions" aria-label="账号操作">
@@ -389,18 +390,6 @@ onBeforeUnmount(() => {
   color: var(--app-text);
   font-size: 15px;
   font-weight: 750;
-}
-
-.landing-brand span {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: var(--app-radius-md);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-  background: var(--app-primary);
 }
 
 .landing-nav-actions {

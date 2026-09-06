@@ -42,7 +42,7 @@ describe('WorkspaceRequirements', () => {
 
     expect(wrapper.findAll('.requirement-item')).toHaveLength(3)
     expect(wrapper.findAll('.requirement-item')[0].text()).toContain('已有优势')
-    expect(wrapper.findAll('.requirement-item')[1].text()).toContain('建议完善')
+    expect(wrapper.findAll('.requirement-item')[1].text()).toContain('可强化表达')
     expect(wrapper.findAll('.requirement-item')[2].text()).toContain('当前材料未体现')
     expect(wrapper.findAll('.requirement-item')[1].classes()).toContain('is-selected')
 

@@ -26,6 +26,7 @@ declare module 'vue' {
     ErrorState: typeof import('./components/common/ErrorState.vue')['default']
     PageHeader: typeof import('./components/common/PageHeader.vue')['default']
     ProductFlowDemo: typeof import('./components/brand/ProductFlowDemo.vue')['default']
+    ProductMark: typeof import('./components/common/ProductMark.vue')['default']
     RequirementNavigator: typeof import('./components/task/RequirementNavigator.vue')['default']
     ResumeEditor: typeof import('./components/workspace/ResumeEditor.vue')['default']
     ResumeReviewActionBar: typeof import('./components/resume/review/ResumeReviewActionBar.vue')['default']

@@ -164,6 +164,7 @@ describe('WorkspacePreviewExport', () => {
 
     expect(wrapper.text()).toContain('可以导出')
     expect(wrapper.text()).toContain('2 页')
+    expect(wrapper.find('.preview-document-toolbar .preview-open-link').text()).toContain('在新窗口打开 PDF')
     expect(button(wrapper, '导出 PDF').attributes('disabled')).toBeUndefined()
     await button(wrapper, '导出 PDF').trigger('click')
     await flushPromises()

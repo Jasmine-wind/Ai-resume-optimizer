@@ -1,8 +1,12 @@
+<script setup lang="ts">
+import ProductMark from '@/components/common/ProductMark.vue'
+</script>
+
 <template>
   <main class="auth-page">
     <header class="auth-topbar">
       <RouterLink to="/" class="auth-brand" aria-label="返回简历优化首页">
-        <span>CV</span>
+        <ProductMark size="md" />
         <strong>简历优化</strong>
       </RouterLink>
       <RouterLink to="/" class="auth-home-link">返回首页</RouterLink>
@@ -60,18 +64,6 @@
   color: var(--app-text);
   font-size: 15px;
   font-weight: 750;
-}
-
-.auth-brand span {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: var(--app-radius-md);
-  color: var(--app-on-primary);
-  font-size: 13px;
-  font-weight: 800;
-  background: var(--app-primary);
 }
 
 .auth-home-link {

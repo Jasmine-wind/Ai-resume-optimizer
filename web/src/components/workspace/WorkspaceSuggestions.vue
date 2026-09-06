@@ -17,10 +17,12 @@ const props = defineProps<{
   selectedRequirementId?: number | null
   document?: ResumeDocument | null
   suggest?: BulletSuggestController | null
+  locationLabel?: string | null
 }>()
 
 const emit = defineEmits<{
   retryLoad: []
+  focusContext: []
   close: []
 }>()
 
@@ -61,7 +63,7 @@ const statusLabel = (value: string) => {
     case 'MATCHED':
       return '已有优势'
     case 'PARTIAL_EVIDENCE':
-      return '建议完善'
+      return '可强化表达'
     case 'NO_EVIDENCE':
       return '当前材料未体现'
     default:
@@ -149,11 +151,13 @@ const activeBulletText = computed(() => {
           <p class="inspector-context-label">受约束改写</p>
           <h2>只修改这一条简历内容</h2>
           <p class="inspector-ai-source">{{ activeBulletText || '当前简历中的工作要点' }}</p>
+          <p v-if="props.locationLabel" class="inspector-target-location">对应位置：{{ props.locationLabel }}</p>
           <BulletSuggestionCard
             :mode="suggestionMode"
             :original-text="props.suggest.candidate.value?.originalText ?? activeBulletText"
             :suggested-text="props.suggest.candidate.value?.suggestedText ?? null"
             :reason="props.suggest.candidate.value?.reason ?? null"
+            :reject-code="props.suggest.rejectInfo.value?.code ?? null"
             :reject-message="props.suggest.rejectInfo.value?.message ?? null"
             :error-message="props.suggest.errorMessage.value ?? null"
             @apply="props.suggest.apply()"
@@ -182,19 +186,21 @@ const activeBulletText = computed(() => {
             <span class="block-count">{{ selected.evidences.length }} 条关联</span>
           </div>
           <div v-if="selected.evidences.length" class="evidence-list">
-            <article
+            <button
               v-for="(evidence, index) in selected.evidences"
               :key="evidence.requirementEvidenceId"
+              type="button"
               class="evidence-item"
               :class="{ 'is-primary': index === 0 }"
+              @click="emit('focusContext')"
             >
               <div class="evidence-source">
                 <span class="evidence-type">{{ evidenceLocation(evidence.sectionLabel) }}</span>
                 <span>{{ evidence.supportLevel === 'SUFFICIENT' ? '足够支持' : '部分支持' }}</span>
               </div>
               <p>“{{ evidence.evidenceText }}”</p>
-              <span class="evidence-location">来自已确认的简历材料</span>
-            </article>
+              <span class="evidence-location">来自已确认的简历材料 · 点击定位</span>
+            </button>
           </div>
           <p v-else class="inspector-muted">当前材料中没有找到可引用的证据。</p>
         </section>
@@ -209,7 +215,7 @@ const activeBulletText = computed(() => {
             当前材料未体现不代表你没有这项经历。只有在确有真实经历时，才手动补充到简历；系统不会自动加入。
           </p>
           <p v-else-if="selected.matchLevel === 'PARTIAL_EVIDENCE'" class="inspector-boundary">
-            建议核对已有事实并让表达更明确。本侧栏不会替你写入新事实。
+            已有相关经历，但当前简历中的表达还不够充分。可以强化已有材料的表达，不会自动加入新事实。
           </p>
         </section>
 
@@ -223,6 +229,9 @@ const activeBulletText = computed(() => {
             <span class="action-mark" aria-hidden="true">↗</span>
             <span>选择中央简历中的具体内容，在该行旁使用“优化”查看受约束改写。</span>
           </div>
+          <button type="button" class="inspector-focus-button" @click="emit('focusContext')">
+            定位到对应简历内容
+          </button>
         </section>
         </div>
       </template>
@@ -309,15 +318,15 @@ const activeBulletText = computed(() => {
 }
 
 .inspector-status.is-partial {
-  color: var(--app-primary-active);
+  color: var(--app-status-partial);
 }
 
 .inspector-status.is-missing {
-  color: var(--app-primary-active);
+  color: var(--app-status-gap);
 }
 
 .inspector-status.is-matched {
-  color: var(--app-accent);
+  color: var(--app-status-supported);
 }
 
 .inspector-status.is-unknown {
@@ -390,7 +399,8 @@ const activeBulletText = computed(() => {
 .inspector-quiet,
 .inspector-boundary,
 .suggestion-intro,
-.suggestion-action-note {
+.suggestion-action-note,
+.inspector-target-location {
   margin: 0;
   color: var(--app-text-secondary);
   font-size: 11px;
@@ -419,8 +429,25 @@ const activeBulletText = computed(() => {
 
 .evidence-item {
   position: relative;
+  display: block;
+  width: 100%;
   padding: 10px 0 9px;
+  border: 0;
   border-bottom: 1px solid var(--app-border);
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.evidence-item:hover,
+.evidence-item:focus-visible {
+  background: color-mix(in srgb, var(--app-primary-soft) 42%, transparent);
+}
+
+.evidence-item:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: -2px;
 }
 
 .evidence-item.is-primary {
@@ -486,7 +513,7 @@ const activeBulletText = computed(() => {
 }
 
 .suggestion-block {
-  background: color-mix(in srgb, var(--app-surface-soft) 75%, var(--app-bg-soft));
+  background: var(--app-ai-surface);
 }
 
 .suggestion-intro {
@@ -499,6 +526,35 @@ const activeBulletText = computed(() => {
   gap: 7px;
   margin-top: 12px;
   color: var(--app-text-secondary);
+}
+
+.inspector-target-location {
+  margin: 8px 18px 14px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--app-primary);
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  line-height: 1.55;
+  background: var(--app-primary-soft);
+}
+
+.inspector-focus-button {
+  margin-top: 13px;
+  border: 0;
+  padding: 0;
+  color: var(--app-primary-active);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.inspector-focus-button:hover,
+.inspector-focus-button:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .action-mark {

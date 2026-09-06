@@ -7,6 +7,7 @@ const props = defineProps<{
   originalText: string
   suggestedText?: string | null
   reason?: string | null
+  rejectCode?: string | null
   rejectMessage?: string | null
   errorMessage?: string | null
 }>()
@@ -23,6 +24,22 @@ const customInstruction = ref('')
 const diffSegments = computed(() =>
   props.suggestedText ? diffText(props.originalText, props.suggestedText) : [],
 )
+
+const rejectReasonLabel = computed(() => {
+  switch (props.rejectCode) {
+    case 'NEW_TECHNOLOGY':
+    case 'NEW_ENTITY':
+      return '引入原文没有的信息'
+    case 'NEW_QUANTITATIVE_CLAIM':
+      return '改变事实语义'
+    case 'NEW_SCOPE_OR_TIME':
+      return '删除或改变了关键限定条件'
+    case 'AI_REFUSED':
+      return '无法在原有事实范围内改写'
+    default:
+      return '与原始材料不一致'
+  }
+})
 
 const submitCustom = () => {
   const instruction = customInstruction.value.trim()
@@ -106,22 +123,24 @@ const submitCustom = () => {
     </template>
 
     <template v-else-if="props.mode === 'rejected'">
-      <p class="suggestion-title">这条建议未通过事实核对</p>
+      <p class="suggestion-title">这条建议没有通过事实校验</p>
       <p class="suggestion-note">
-        {{ props.rejectMessage ?? '改写引入了原文没有的事实，已被拒绝。' }}
+        AI 改写改变了原始材料的语义，例如把未确认的信息写成了确定事实，因此这条建议没有被采纳。
       </p>
+      <span class="suggestion-reason-label">原因：{{ rejectReasonLabel }}</span>
+      <p v-if="props.rejectMessage" class="suggestion-detail">校验说明：{{ props.rejectMessage }}</p>
       <div class="suggestion-actions">
-        <el-button size="small" type="primary" @click="emit('regenerate')">重新生成</el-button>
-        <el-button size="small" text @click="emit('reject')">关闭</el-button>
+        <el-button size="small" type="primary" @click="emit('regenerate')">重新生成建议</el-button>
+        <el-button size="small" text @click="emit('reject')">继续手工编辑</el-button>
       </div>
     </template>
 
     <template v-else>
-      <p class="suggestion-title">建议生成失败</p>
-      <p class="suggestion-note">{{ props.errorMessage ?? 'AI 服务暂时不可用，请稍后重试。' }}</p>
+      <p class="suggestion-title">暂时没有生成建议</p>
+      <p class="suggestion-note">{{ props.errorMessage ?? 'AI 服务暂时不可用。你可以稍后再试，也可以继续手工编辑。' }}</p>
       <div class="suggestion-actions">
-        <el-button size="small" type="primary" @click="emit('regenerate')">重试</el-button>
-        <el-button size="small" text @click="emit('reject')">关闭</el-button>
+        <el-button size="small" type="primary" @click="emit('regenerate')">重新生成建议</el-button>
+        <el-button size="small" text @click="emit('reject')">继续手工编辑</el-button>
       </div>
     </template>
   </div>
@@ -159,9 +178,22 @@ const submitCustom = () => {
 }
 
 .suggestion-note,
-.suggestion-stale {
+.suggestion-stale,
+.suggestion-detail {
   color: var(--app-text-secondary);
   font-size: 12px;
+}
+
+.suggestion-reason-label {
+  color: var(--app-warning);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.suggestion-detail {
+  margin: -3px 0 0;
+  color: var(--app-text-muted);
+  line-height: 1.55;
 }
 
 .suggestion-stale {

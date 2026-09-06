@@ -81,7 +81,7 @@ const matchLevelLabel = (value: string) => {
     case 'MATCHED':
       return '已有优势'
     case 'PARTIAL_EVIDENCE':
-      return '建议完善'
+      return '可强化表达'
     case 'NO_EVIDENCE':
       return '当前材料未体现'
     default:
@@ -289,6 +289,9 @@ onMounted(loadResult)
               当前简历没有找到支持这项要求的内容
             </strong>
             <strong v-else>{{ selectedRequirement.requirementText }}</strong>
+            <p v-if="selectedRequirement.matchLevel === 'PARTIAL_EVIDENCE'" class="selected-requirement-hint">
+              已有相关经历，但当前简历中的表达还不够充分。
+            </p>
           </div>
           <el-button type="primary" @click="goToWorkspace(selectedRequirement.evidenceRequirementId)">
             修改简历
@@ -365,7 +368,7 @@ onMounted(loadResult)
               <strong>{{ legacyResult.strongMatches.length }}</strong><span>已有优势</span>
             </span>
             <span class="analysis-summary-item is-partial">
-              <strong>{{ legacyPriorityItems.length }}</strong><span>建议完善</span>
+              <strong>{{ legacyPriorityItems.length }}</strong><span>可强化表达</span>
             </span>
             <span class="analysis-summary-item is-missing">
               <strong>{{ legacyResult.missingSkills.length }}</strong><span>当前材料未体现</span>
@@ -383,9 +386,9 @@ onMounted(loadResult)
           </div>
           <div class="legacy-detail-list">
             <section class="legacy-detail-section">
-              <header><h2>建议完善</h2><span>{{ legacyPriorityItems.length }} 条</span></header>
+              <header><h2>可强化表达</h2><span>{{ legacyPriorityItems.length }} 条</span></header>
               <article v-for="(item, index) in legacyPriorityItems" :key="`${item.kind}-${item.title}-${index}`">
-                <span class="analysis-status is-partial">建议完善</span>
+                <span class="analysis-status is-partial">可强化表达</span>
                 <strong>{{ item.title || '相关经历' }}</strong>
                 <p>{{ item.description || '建议回看对应经历并补充真实场景。' }}</p>
                 <el-button size="small" type="primary" @click="goToWorkspace()">进入编辑器</el-button>
@@ -601,15 +604,15 @@ onMounted(loadResult)
 }
 
 .analysis-status.is-matched {
-  color: var(--app-success);
+  color: var(--app-status-supported);
 }
 
 .analysis-status.is-partial {
-  color: var(--app-warning);
+  color: var(--app-status-partial);
 }
 
 .analysis-status.is-missing {
-  color: var(--app-primary-active);
+  color: var(--app-status-gap);
 }
 
 .analysis-status.is-unknown {
@@ -1098,6 +1101,13 @@ onMounted(loadResult)
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.selected-requirement-hint {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .analysis-selected-requirement-bar > .el-button {

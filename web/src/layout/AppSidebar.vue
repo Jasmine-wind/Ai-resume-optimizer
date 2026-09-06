@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import ProductMark from '@/components/common/ProductMark.vue'
 
 defineProps<{
   /** 窄屏 Drawer 展开状态。桌面端由 Global Topbar 承担导航。 */
@@ -44,7 +45,7 @@ onMounted(() => {
   >
     <div class="app-sidebar-header">
       <RouterLink to="/app" class="app-sidebar-brand" @click="emit('navigate')">
-        <span class="app-sidebar-mark" aria-hidden="true">CV</span>
+        <ProductMark size="sm" />
         <div>
           <strong>简历优化</strong>
           <small>为目标岗位准备简历</small>

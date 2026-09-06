@@ -71,6 +71,7 @@ const effectiveSelectedRequirementId = computed(() => {
 })
 
 const evidenceAnchor = ref<WorkspaceEvidenceAnchor | null>(null)
+const focusRequestKey = ref(0)
 const selectedWorkspaceSectionId = computed(() => evidenceAnchor.value?.sectionId ?? null)
 const selectedWorkspaceBulletId = computed(() => evidenceAnchor.value?.bulletId ?? null)
 
@@ -146,11 +147,20 @@ const goToAnalysis = () => {
 
 const selectRequirement = (requirementId: number) => {
   selectedRequirementId.value = requirementId
+  focusRequestKey.value += 1
   inspectorOpen.value = false
   if (isNarrowScreen.value) mobilePanel.value = 'editor'
   void router.replace({
     query: { ...route.query, requirement: String(requirementId) },
   })
+}
+
+const focusCurrentContext = () => {
+  if (!evidenceAnchor.value && effectiveSelectedRequirementId.value) {
+    resolveSelectedEvidenceAnchor()
+  }
+  focusRequestKey.value += 1
+  if (isNarrowScreen.value) mobilePanel.value = 'editor'
 }
 
 const setReviewStep = (step: 'match' | 'evidence' | 'edit' | 'preview') => {
@@ -245,6 +255,23 @@ const openInspector = () => {
   inspectorOpen.value = true
   if (isNarrowScreen.value) mobilePanel.value = 'suggestions'
 }
+
+const contextLocationLabel = computed(() => {
+  const anchor = evidenceAnchor.value
+  const document = editor.draft.value
+  if (!anchor || !document) return null
+  const section = document.sections.find((item) => item.id === anchor.sectionId)
+  if (!section) return null
+  if (!anchor.bulletId) return section.title || '对应简历章节'
+  for (const entry of section.entries) {
+    const bulletIndex = entry.bullets.findIndex((bullet) => bullet.id === anchor.bulletId)
+    if (bulletIndex < 0) continue
+    const entryLabel = entry.organization || entry.school || entry.group || '当前条目'
+    const bulletLabel = section.kind === 'PROJECT' || section.kind === 'EXPERIENCE' ? '工作要点' : '内容'
+    return `${section.title || '简历内容'} · ${entryLabel} · 第 ${bulletIndex + 1} 条${bulletLabel}`
+  }
+  return section.title || '对应简历章节'
+})
 
 const closeInspector = () => {
   inspectorOpen.value = false
@@ -492,6 +519,16 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
                 </details>
               </div>
             </div>
+            <div v-if="contextLocationLabel || effectiveSelectedRequirementId" class="workspace-context-strip">
+              <div>
+                <span>当前正在优化</span>
+                <strong>{{ contextLocationLabel || '对应简历内容' }}</strong>
+              </div>
+              <p v-if="requirements.find((item) => item.evidenceRequirementId === effectiveSelectedRequirementId)?.requirementText">
+                对应岗位要求：{{ requirements.find((item) => item.evidenceRequirementId === effectiveSelectedRequirementId)?.requirementText }}
+              </p>
+              <button type="button" @click="focusCurrentContext">定位到简历</button>
+            </div>
             <div class="resume-stage-scroll">
               <ResumeEditor
                 :document="editor.draft.value"
@@ -500,6 +537,7 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
                 :suggest-locked="suggestLocked"
                 :selected-section-id="selectedWorkspaceSectionId"
                 :focused-bullet-id="selectedWorkspaceBulletId"
+                :focus-request-key="focusRequestKey"
                 @change="handleEditorChange"
               />
             </div>
@@ -516,7 +554,9 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
             :selected-requirement-id="effectiveSelectedRequirementId"
             :document="editor.draft.value"
             :suggest="bulletSuggest"
+            :location-label="contextLocationLabel"
             @retry-load="loadAnalysis"
+            @focus-context="focusCurrentContext"
             @close="closeInspector"
           />
         </div>
@@ -903,13 +943,71 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
 /* Focused editing mode: the document owns the canvas; supporting panes are transient. */
 .workspace-document-toolbar {
   display: flex;
-  min-height: 40px;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
   gap: var(--app-space-3);
   padding: 0 var(--app-space-6);
-  border-bottom: 1px solid var(--app-border);
+  border-bottom: 1px solid var(--app-border-strong);
   background: var(--app-surface);
+}
+
+.workspace-context-strip {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1fr) auto;
+  gap: var(--app-space-4);
+  align-items: center;
+  padding: 9px var(--app-space-6);
+  border-bottom: 1px solid var(--app-border);
+  color: var(--app-text-secondary);
+  background: color-mix(in srgb, var(--app-primary-soft) 35%, var(--app-surface));
+}
+
+.workspace-context-strip > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.workspace-context-strip span {
+  color: var(--app-text-muted);
+  font-family: var(--app-font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.workspace-context-strip strong,
+.workspace-context-strip p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--app-text);
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-context-strip p {
+  color: var(--app-text-secondary);
+}
+
+.workspace-context-strip button {
+  border: 0;
+  padding: 4px 0;
+  color: var(--app-primary-active);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: transparent;
+  cursor: pointer;
+}
+
+.workspace-context-strip button:hover,
+.workspace-context-strip button:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .document-toolbar-label {
@@ -991,6 +1089,17 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
   .workspace-document-toolbar {
     min-height: 38px;
     padding: 0 var(--app-space-3);
+  }
+
+  .workspace-context-strip {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 9px var(--app-space-3);
+  }
+
+  .workspace-context-strip p {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    white-space: normal;
   }
 }
 

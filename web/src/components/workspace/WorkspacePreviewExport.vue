@@ -451,20 +451,30 @@ onBeforeUnmount(() => {
         aria-label="PDF 文档预览"
         :aria-busy="previewLoading"
       >
-        <div v-if="previewLoading" class="preview-placeholder" role="status">
-          <strong>正在生成预览…</strong>
-          <span>使用最近一次成功保存的简历内容。</span>
-        </div>
-        <iframe
-          v-else-if="previewUrl"
-          :src="previewUrl"
-          class="preview-frame"
-          title="简历 PDF 预览"
-        />
-        <a v-if="previewUrl" class="preview-open-link" :href="previewUrl" target="_blank" rel="noopener">在新窗口打开 PDF</a>
-        <div v-else class="preview-placeholder">
-          <strong>预览将在这里显示</strong>
-          <span>生成预览后，可以在导出前检查最终文档。</span>
+        <header class="preview-document-toolbar">
+          <div>
+            <span class="preview-section-label">最终文档</span>
+            <strong>PDF 预览</strong>
+          </div>
+          <a v-if="previewUrl" class="preview-open-link" :href="previewUrl" target="_blank" rel="noopener">
+            在新窗口打开 PDF
+          </a>
+        </header>
+        <div class="preview-document-canvas">
+          <div v-if="previewLoading" class="preview-placeholder" role="status">
+            <strong>正在生成预览…</strong>
+            <span>使用最近一次成功保存的简历内容。</span>
+          </div>
+          <iframe
+            v-else-if="previewUrl"
+            :src="previewUrl"
+            class="preview-frame"
+            title="简历 PDF 预览"
+          />
+          <div v-else class="preview-placeholder">
+            <strong>预览将在这里显示</strong>
+            <span>生成预览后，可以在导出前检查最终文档。</span>
+          </div>
         </div>
       </section>
 
@@ -642,17 +652,52 @@ onBeforeUnmount(() => {
   min-width: 0;
   min-height: 0;
   height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
   border-right: 1px solid var(--app-border-strong);
   background: var(--app-pdf-canvas);
 }
 
-.preview-open-link {
-  display: inline-block;
-  margin-top: var(--app-space-3);
-  color: var(--app-primary-active);
+.preview-document-toolbar {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  padding: 0 var(--app-space-5);
+  border-bottom: 1px solid var(--app-border-strong);
+  background: var(--app-surface-soft);
+}
+
+.preview-document-toolbar > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+}
+
+.preview-document-toolbar strong {
+  color: var(--app-text);
   font-size: var(--app-font-size-sm);
+}
+
+.preview-open-link {
+  color: var(--app-primary-active);
+  font-size: var(--app-font-size-xs);
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.preview-open-link:hover,
+.preview-open-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.preview-document-canvas {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .preview-frame {
@@ -897,7 +942,6 @@ onBeforeUnmount(() => {
 }
 
 .export-history {
-  margin-top: auto;
   border-top: 1px solid var(--app-border-strong);
 }
 

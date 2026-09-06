@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type {
   ResumeDocument,
@@ -91,6 +91,7 @@ const editingSectionTitle = ref<string | null>(null)
 const editingEntryKey = ref<string | null>(null)
 const expandedSectionIds = ref<Set<string>>(new Set())
 const editorRoot = ref<HTMLElement | null>(null)
+const basicsDetails = ref<HTMLDetailsElement | null>(null)
 const sectionElements = new Map<string, HTMLElement>()
 
 const focusEditorElement = async (selector: string) => {
@@ -433,7 +434,22 @@ const handleSectionKeydown = (sectionId: string, index: number, event: KeyboardE
   if (section) reorderAnnouncement.value = `已将${sectionTitle(section)}移动到第 ${index + delta + 1} 项`
 }
 
+const handleBasicsOutsidePointerDown = (event: PointerEvent) => {
+  if (basicsDetails.value?.open && event.target instanceof Node && !basicsDetails.value.contains(event.target)) {
+    basicsDetails.value.open = false
+  }
+}
+
+const handleBasicsEscape = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && basicsDetails.value?.open) {
+    basicsDetails.value.open = false
+    event.stopPropagation()
+  }
+}
+
 onMounted(() => {
+  document.addEventListener('pointerdown', handleBasicsOutsidePointerDown)
+  document.addEventListener('keydown', handleBasicsEscape)
   window.addEventListener('pointermove', handleSectionPointerMove)
   window.addEventListener('pointerup', finishSectionReorder)
   window.addEventListener('pointercancel', clearSectionReorder)
@@ -441,6 +457,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   clearSectionReorder()
+  document.removeEventListener('pointerdown', handleBasicsOutsidePointerDown)
+  document.removeEventListener('keydown', handleBasicsEscape)
   window.removeEventListener('pointermove', handleSectionPointerMove)
   window.removeEventListener('pointerup', finishSectionReorder)
   window.removeEventListener('pointercancel', clearSectionReorder)
@@ -587,7 +605,7 @@ const addEntryLabel = (kind: string) => {
     case 'SKILL':
       return '添加技能组'
     default:
-      return '添加内容条目'
+      return '添加内容'
   }
 }
 
@@ -597,6 +615,37 @@ const entryContentLabel = (kind: string) => {
   if (kind === 'PROJECT') return '项目要点'
   return '内容'
 }
+
+const entryDeleteTitle = (kind: string) => {
+  switch (kind) {
+    case 'EXPERIENCE':
+      return '删除这段工作经历？'
+    case 'PROJECT':
+      return '删除这段项目经历？'
+    case 'EDUCATION':
+      return '删除这段教育经历？'
+    case 'SKILL':
+      return '删除这个技能组？'
+    default:
+      return '删除这段内容？'
+  }
+}
+
+const confirmDeleteEntry = async (sectionId: string, entryId: string, kind: string) => {
+  try {
+    await ElMessageBox.confirm(
+      `其中的${entryContentLabel(kind)}也会一并删除。`,
+      entryDeleteTitle(kind),
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  deleteEntry(sectionId, entryId)
+}
+
+const bulletDeleteLabel = (entry: ResumeDocumentEntry, kind: string, index: number) =>
+  `删除${entryTitle(entry, kind)}中的第 ${index + 1} 条${entryContentLabel(kind)}`
 
 const SUGGEST_INTENTS: Array<{ command: BulletSuggestIntent | 'CUSTOM'; label: string }> = [
   { command: 'JOB_TARGETED', label: '岗位定向优化' },
@@ -654,9 +703,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
           </button>
           <p v-if="document.basics.jobIntention" class="identity-target">{{ document.basics.jobIntention }}</p>
         </div>
-        <details class="basics-more">
-          <summary aria-label="编辑补充信息">···</summary>
-          <div class="basics-more-menu">
+        <details ref="basicsDetails" class="basics-details">
+          <summary aria-label="编辑补充信息">补充信息</summary>
+          <div class="basics-details-menu">
             <label>
               <span>求职意向</span>
               <el-input
@@ -742,6 +791,10 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
       :class="{
         'is-collapsed': !isSectionExpanded(section.id),
         'is-focused': props.selectedSectionId === section.id,
+        'has-focused-bullet': Boolean(
+          props.focusedBulletId && section.entries.some((entry) => entry.bullets.some((bullet) => bullet.id === props.focusedBulletId)),
+        ),
+        'is-empty': section.entries.length === 0,
         'is-reorder-source': draggedSectionId === section.id,
         'is-drop-before': dropSectionId === section.id && dropBefore,
         'is-drop-after': dropSectionId === section.id && !dropBefore,
@@ -769,9 +822,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
           <span class="section-collapse-icon" aria-hidden="true" />
         </button>
         <div class="section-heading">
-          <span v-if="section.title.trim() !== sectionKindLabel(section.kind)" class="section-kind">
-            {{ sectionKindLabel(section.kind) }}
-          </span>
           <template v-if="editingSectionTitle === section.id">
             <el-input
               class="section-title-input"
@@ -964,6 +1014,15 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
               {{ entryMeta(entry, section.kind) }}
             </button>
           </template>
+          <button
+            v-if="!isEntryEditing(section.id, entry.id)"
+            type="button"
+            class="entry-delete-action"
+            :aria-label="`删除条目：${entryTitle(entry, section.kind)}`"
+            @click="confirmDeleteEntry(section.id, entry.id, section.kind)"
+          >
+            删除条目
+          </button>
         </div>
         <template v-if="section.kind === 'SKILL'">
           <div class="skill-grid">
@@ -1120,10 +1179,13 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
         </div>
         <template v-if="section.kind !== 'SKILL'">
           <div
-            v-for="bullet in entry.bullets"
+            v-for="(bullet, bulletIndex) in entry.bullets"
             :key="bullet.id"
             class="bullet-block"
-            :class="{ 'is-evidence-focus': props.focusedBulletId === bullet.id }"
+            :class="{
+              'is-evidence-focus': props.focusedBulletId === bullet.id,
+              'is-suggest-active': suggestActive(bullet.id),
+            }"
             :data-bullet-id="bullet.id"
           >
             <div class="bullet-line">
@@ -1144,10 +1206,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
                   "
                 />
               </label>
-              <div
-                class="bullet-actions"
-                :class="{ 'has-suggestion-entry': suggestEnabled && suggest }"
-              >
+              <div class="bullet-actions">
                 <el-dropdown
                   v-if="suggestEnabled && suggest"
                   trigger="click"
@@ -1177,19 +1236,14 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
-                <details class="inline-more bullet-more">
-                  <summary aria-label="工作要点操作">···</summary>
-                  <div class="inline-more-menu">
-                    <button
-                      type="button"
-                      class="danger-action"
-                      :aria-label="`删除${entryTitle(entry, section.kind)}中的${entryContentLabel(section.kind)}`"
-                      @click="deleteBullet(section.id, entry.id, bullet.id)"
-                    >
-                      删除此{{ entryContentLabel(section.kind) }}
-                    </button>
-                  </div>
-                </details>
+                <button
+                  type="button"
+                  class="bullet-delete-action"
+                  :aria-label="bulletDeleteLabel(entry, section.kind, bulletIndex)"
+                  @click="deleteBullet(section.id, entry.id, bullet.id)"
+                >
+                  删除
+                </button>
               </div>
             </div>
           </div>
@@ -1199,27 +1253,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
           <el-button size="small" @click="addBullet(section.id, entry.id)">
             添加{{ entryContentLabel(section.kind) }}
           </el-button>
-        </div>
-        <div class="entry-more-row">
-          <details class="entry-more">
-            <summary aria-label="条目操作">···</summary>
-            <div class="entry-more-menu">
-              <button
-                type="button"
-                @click="beginEntryEdit(section.id, entry.id)"
-              >
-                编辑详情
-              </button>
-              <button
-                type="button"
-                class="danger-action"
-                :aria-label="`删除条目：${entryTitle(entry, section.kind)}`"
-                @click="deleteEntry(section.id, entry.id)"
-              >
-                删除此条目
-              </button>
-            </div>
-          </details>
         </div>
       </article>
 
@@ -1360,25 +1393,10 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   font-weight: 700;
 }
 
-.inline-more summary,
-.entry-more summary {
-  width: fit-content;
-  color: var(--app-primary);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .section-heading {
   display: grid;
   gap: 2px;
   min-width: 0;
-}
-
-.section-kind {
-  color: var(--app-text-muted);
-  font-size: 11px;
-  font-weight: 700;
 }
 
 .section-title-display {
@@ -1406,57 +1424,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   width: min(560px, 100%);
 }
 
-.entry-more,
-.inline-more {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.entry-more summary,
-.inline-more summary {
-  list-style: none;
-}
-
-.entry-more summary::-webkit-details-marker,
-.inline-more summary::-webkit-details-marker {
-  display: none;
-}
-
-.entry-more-menu,
-.inline-more-menu {
-  position: absolute;
-  z-index: 5;
-  top: calc(100% + 7px);
-  right: 0;
-  display: grid;
-  min-width: 142px;
-  gap: 2px;
-  padding: 5px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow-soft);
-}
-
-.entry-more-menu button,
-.inline-more-menu button {
-  border: 0;
-  padding: 8px 9px;
-  color: var(--app-text-secondary);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  background: transparent;
-  cursor: pointer;
-}
-
-.entry-more-menu button:hover,
-.entry-more-menu button:focus-visible,
-.inline-more-menu button:hover,
-.inline-more-menu button:focus-visible {
-  color: var(--app-text);
-  background: var(--app-surface-soft);
-}
 
 .editor-empty {
   margin: 0;
@@ -1541,12 +1508,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   transition: opacity 0.15s ease;
 }
 
-.bullet-actions.has-suggestion-entry,
-.bullet-line:hover .bullet-actions,
-.bullet-line:focus-within .bullet-actions,
-.bullet-actions:focus-within {
-  opacity: 1;
-}
 
 .bullet-suggest-button {
   color: var(--app-primary);
@@ -1559,15 +1520,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 .entry-actions {
   padding-top: 2px;
-}
-
-.entry-more-row {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.danger-action {
-  color: var(--app-danger) !important;
 }
 
 /* The editor keeps every structured field and action, but presents them as one document of record. */
@@ -1688,14 +1640,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 .section-title-display:hover {
   color: var(--app-primary-active);
-}
-
-.section-kind {
-  color: var(--app-text-muted);
-  font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
 .editor-entry {
@@ -1845,33 +1789,34 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   font-size: 30px;
 }
 
-.basics-more {
+.basics-details {
   position: relative;
   flex: 0 0 auto;
 }
 
-.basics-more summary {
+.basics-details summary {
   border: 0;
-  padding: 2px 4px;
-  color: var(--app-text-muted);
-  font-size: 18px;
-  line-height: 1;
+  padding: 2px 0;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
   cursor: pointer;
   list-style: none;
 }
 
-.basics-more summary::-webkit-details-marker {
+.basics-details summary::-webkit-details-marker {
   display: none;
 }
 
-.basics-more summary:hover,
-.basics-more summary:focus-visible,
-.basics-more[open] summary {
+.basics-details summary:hover,
+.basics-details summary:focus-visible,
+.basics-details[open] summary {
   color: var(--app-primary-active);
-  background: var(--app-primary-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.basics-more-menu {
+.basics-details-menu {
   position: absolute;
   z-index: 5;
   top: calc(100% + 7px);
@@ -1886,7 +1831,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   box-shadow: var(--app-shadow-soft);
 }
 
-.basics-more-menu label {
+.basics-details-menu label {
   display: grid;
   gap: 4px;
   color: var(--app-text-secondary);
@@ -1894,7 +1839,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   font-weight: 700;
 }
 
-.basics-more-menu label :deep(.el-input__wrapper) {
+.basics-details-menu label :deep(.el-input__wrapper) {
   min-height: 29px;
   box-shadow: 0 1px 0 var(--app-border) !important;
 }
@@ -2002,7 +1947,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 .editor-section .editor-block-header {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
@@ -2024,10 +1969,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   min-width: 0;
 }
 
-.section-kind {
-  font-size: 8px;
-}
-
 .section-title-display {
   max-width: 100%;
   overflow: visible;
@@ -2043,28 +1984,15 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   white-space: normal;
 }
 
-.entry-more summary,
-.inline-more summary {
-  min-width: 20px;
-  padding: 2px 4px;
-  color: var(--app-text-muted);
-  font-size: 16px;
-  line-height: 1;
-  text-align: center;
-}
-
-.entry-more summary:hover,
-.entry-more summary:focus-visible,
-.inline-more summary:hover,
-.inline-more summary:focus-visible {
-  color: var(--app-primary-active);
-  background: var(--app-primary-soft);
-}
-
 .editor-section.is-focused > .editor-block-header {
-  background: color-mix(in srgb, var(--app-focus-soft) 42%, transparent);
-  box-shadow: inset 3px 0 0 var(--app-focus);
-  padding: 5px 7px;
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--app-focus-soft) 24%, transparent);
+  box-shadow: inset 2px 0 0 var(--app-focus);
+}
+
+.editor-section.is-focused.has-focused-bullet > .editor-block-header {
+  background: color-mix(in srgb, var(--app-focus-soft) 10%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--app-focus) 58%, transparent);
 }
 
 .editor-section.is-focused {
@@ -2152,7 +2080,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 .entry-document-heading {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 38%);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 38%) auto;
   gap: 4px 12px;
   align-items: start;
 }
@@ -2215,17 +2143,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   grid-column: 1 / -1;
 }
 
-.entry-more-row {
-  margin-top: -5px;
-  opacity: 0;
-  transition: opacity 140ms ease;
-}
-
-.editor-entry:hover .entry-more-row,
-.editor-entry:focus-within .entry-more-row {
-  opacity: 1;
-}
-
 .editor-entry > .skill-grid,
 .editor-entry > .entry-grid,
 .editor-entry > .entry-bullets-label {
@@ -2244,6 +2161,12 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 .editor-section > .section-footer {
   min-height: 24px;
   padding-top: 5px;
+  opacity: 0.18;
+  transition: opacity 140ms ease;
+}
+
+.editor-section.is-empty > .section-footer {
+  opacity: 1;
 }
 
 .editor-entry:hover > .entry-actions,
@@ -2253,6 +2176,13 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   opacity: 1;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .editor-section:not(.is-empty):hover > .section-footer,
+  .editor-section:not(.is-empty):focus-within > .section-footer {
+    opacity: 1;
+  }
+}
+
 .bullet-block {
   gap: 3px;
 }
@@ -2260,9 +2190,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 .bullet-block.is-evidence-focus {
   margin: -4px 0 -4px -10px;
   padding: 5px 8px 5px 10px;
-  border: 1px solid color-mix(in srgb, var(--app-focus) 38%, var(--app-border));
+  border: 1px solid color-mix(in srgb, var(--app-focus) 32%, var(--app-border));
   border-radius: var(--app-radius-sm);
-  background: color-mix(in srgb, var(--app-focus-soft) 58%, var(--app-surface));
+  background: color-mix(in srgb, var(--app-focus-soft) 48%, var(--app-surface));
   box-shadow: inset 3px 0 0 var(--app-focus);
   animation: resume-focus-pulse 1.6s ease-out both;
 }
@@ -2311,16 +2241,21 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   box-shadow: none !important;
 }
 
-.bullet-actions,
-.bullet-actions.has-suggestion-entry {
+.bullet-actions {
+  display: flex;
   min-height: 27px;
+  align-items: center;
+  gap: 8px;
   opacity: 0;
+  transition: opacity 140ms ease;
 }
 
-.bullet-line:hover .bullet-actions,
-.bullet-line:focus-within .bullet-actions,
+.bullet-block:hover .bullet-actions,
+.bullet-block:focus-within .bullet-actions,
+.bullet-block.is-evidence-focus .bullet-actions,
+.bullet-block.is-suggest-active .bullet-actions,
 .bullet-actions:focus-within {
-  opacity: 1 !important;
+  opacity: 1;
 }
 
 .bullet-line:hover .bullet-suggest-button,
@@ -2328,6 +2263,47 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   border-color: var(--app-ai) !important;
   color: var(--app-ai) !important;
   background: var(--app-ai-soft) !important;
+}
+
+.bullet-delete-action,
+.entry-delete-action {
+  border: 0;
+  padding: 0;
+  color: var(--app-danger);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bullet-delete-action {
+  color: color-mix(in srgb, var(--app-danger) 78%, var(--app-text-secondary));
+}
+
+.bullet-delete-action:hover,
+.bullet-delete-action:focus-visible,
+.entry-delete-action:hover,
+.entry-delete-action:focus-visible {
+  color: var(--app-danger);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.entry-delete-action {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: start;
+  justify-self: end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.editor-entry:hover .entry-delete-action,
+.editor-entry:focus-within .entry-delete-action {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .entry-actions :deep(.el-button),
@@ -2362,6 +2338,27 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   }
 }
 
+@media (hover: none), (pointer: coarse) {
+  .bullet-actions {
+    opacity: 1;
+  }
+
+  .entry-delete-action {
+    opacity: 0.72;
+    pointer-events: auto;
+  }
+
+  .editor-entry > .entry-actions {
+    height: auto;
+    min-height: 24px;
+    opacity: 0.55;
+  }
+
+  .editor-section:not(.is-empty) > .section-footer {
+    opacity: 0.32;
+  }
+}
+
 @media (max-width: 760px) {
   .resume-editor {
     padding: 8px 8px 24px;
@@ -2384,8 +2381,18 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   }
 
   .entry-document-heading {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 3px;
+  }
+
+  .entry-title-display,
+  .entry-meta-display {
+    grid-column: 1;
+  }
+
+  .entry-delete-action {
+    grid-column: 2;
+    grid-row: 1 / span 2;
   }
 
   .entry-meta-display {
@@ -2406,9 +2413,21 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
     opacity: 1;
   }
 
-  .entry-more-row {
-    opacity: 1;
+  .entry-delete-action {
+    opacity: 0.72;
+    pointer-events: auto;
   }
+
+  .editor-entry > .entry-actions {
+    height: auto;
+    min-height: 24px;
+    opacity: 0.55;
+  }
+
+  .editor-section:not(.is-empty) > .section-footer {
+    opacity: 0.32;
+  }
+
 }
 
 </style>

@@ -67,7 +67,9 @@ const countByStatus = (matchLevel: string) =>
           <strong>{{ requirement.requirementText }}</strong>
           <span class="requirement-meta">
             <span class="status-dot" :class="statusClass(requirement.matchLevel)" aria-hidden="true" />
-            <span>{{ statusLabel(requirement.matchLevel) }}</span>
+            <span class="requirement-status-label" :class="statusClass(requirement.matchLevel)">
+              {{ statusLabel(requirement.matchLevel) }}
+            </span>
           </span>
         </span>
       </button>
@@ -205,8 +207,20 @@ const countByStatus = (matchLevel: string) =>
   font-size: 12px;
 }
 
-.requirement-item.is-selected .requirement-meta {
-  color: var(--app-text-secondary);
+.requirement-status-label.is-supported {
+  color: var(--app-status-supported);
+}
+
+.requirement-status-label.is-needs-edit {
+  color: var(--app-status-partial);
+}
+
+.requirement-status-label.is-gap {
+  color: var(--app-status-gap);
+}
+
+.requirement-status-label.is-unknown {
+  color: var(--app-danger);
 }
 
 .status-dot {
@@ -218,15 +232,15 @@ const countByStatus = (matchLevel: string) =>
 }
 
 .status-dot.is-supported {
-  background: var(--app-success);
+  background: var(--app-status-supported);
 }
 
 .status-dot.is-needs-edit {
-  background: var(--app-warning);
+  background: var(--app-status-partial);
 }
 
 .status-dot.is-gap {
-  background: var(--app-primary);
+  background: var(--app-status-gap);
 }
 
 .rail-empty {

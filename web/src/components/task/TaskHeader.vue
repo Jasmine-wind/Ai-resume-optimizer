@@ -78,11 +78,11 @@ const steps = [
 
 .task-header-main {
   display: flex;
-  min-height: 78px;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
   gap: var(--app-space-6);
-  padding: var(--app-space-4) var(--app-content-gutter);
+  padding: 10px var(--app-content-gutter);
 }
 
 .task-identity {
@@ -91,7 +91,7 @@ const steps = [
 
 .task-back {
   display: block;
-  margin: 0 0 var(--app-space-2);
+  margin: 0 0 var(--app-space-1);
   border: 0;
   border-bottom: 1px solid transparent;
   padding: 0;
@@ -146,7 +146,7 @@ const steps = [
 
 .task-workflow {
   display: flex;
-  min-height: 42px;
+  min-height: 34px;
   align-items: center;
   gap: var(--app-space-2);
   padding: 0 var(--app-content-gutter);

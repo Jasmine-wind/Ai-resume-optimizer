@@ -29,7 +29,6 @@ describe('WorkspaceRequirements', () => {
     const select = vi.fn()
     const wrapper = mount(WorkspaceRequirements, {
       props: {
-        jobTitle: '后端工程师',
         selectedRequirementId: 2,
         requirements: [
           requirement(1, 'MATCHED', 1),
@@ -44,6 +43,9 @@ describe('WorkspaceRequirements', () => {
     expect(wrapper.findAll('.requirement-item')[0].text()).toContain('已有优势')
     expect(wrapper.findAll('.requirement-item')[1].text()).toContain('可强化表达')
     expect(wrapper.findAll('.requirement-item')[2].text()).toContain('当前材料未体现')
+    expect(wrapper.findAll('.requirement-status-label')[0].classes()).toContain('is-supported')
+    expect(wrapper.findAll('.requirement-status-label')[1].classes()).toContain('is-needs-edit')
+    expect(wrapper.findAll('.requirement-status-label')[2].classes()).toContain('is-gap')
     expect(wrapper.find('.rail-count').text()).toContain('待处理')
     expect(wrapper.findAll('.requirement-item')[1].classes()).toContain('is-selected')
 

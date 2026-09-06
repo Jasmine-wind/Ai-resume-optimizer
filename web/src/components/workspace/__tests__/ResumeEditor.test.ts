@@ -6,6 +6,8 @@ import { nextTick, ref } from 'vue'
 import ResumeEditor from '@/components/workspace/ResumeEditor.vue'
 import type { ResumeDocument } from '@/types/resume-document'
 
+const confirmEntryDelete = vi.hoisted(() => vi.fn())
+
 const elementPlusStubs = vi.hoisted(() => ({
   ElInput: {
     name: 'ElInput',
@@ -21,6 +23,7 @@ const elementPlusStubs = vi.hoisted(() => ({
   ElDropdown: { template: '<div><slot /></div>' },
   ElDropdownMenu: { template: '<div><slot /></div>' },
   ElDropdownItem: { template: '<div><slot /></div>' },
+  ElMessageBox: { confirm: confirmEntryDelete },
 }))
 
 vi.mock('element-plus', () => ({
@@ -115,16 +118,52 @@ describe('ResumeEditor', () => {
     expect(wrapper.find('.identity-name-input').exists()).toBe(true)
   })
 
-  it('keeps entry details and destructive actions behind one accessible menu', async () => {
+  it('keeps entry editing direct from the title and confirms destructive deletion', async () => {
+    const editWrapper = mount(ResumeEditor, { props: { document: makeDocument() } })
+    await editWrapper.get('.entry-title-display').trigger('click')
+    expect(editWrapper.get('.entry-inline-editor').exists()).toBe(true)
+    expect(editWrapper.text()).not.toContain('编辑详情')
+
+    const cancelChange = vi.fn()
+    confirmEntryDelete.mockRejectedValueOnce(new Error('cancelled'))
+    const cancelWrapper = mount(ResumeEditor, { props: { document: makeDocument(), onChange: cancelChange } })
+    await cancelWrapper.get('.entry-delete-action').trigger('click')
+    expect(cancelChange).not.toHaveBeenCalled()
+
+    confirmEntryDelete.mockResolvedValueOnce(true)
+    const onChange = vi.fn()
+    const deleteWrapper = mount(ResumeEditor, { props: { document: makeDocument(), onChange } })
+    await deleteWrapper.get('.entry-delete-action').trigger('click')
+    expect(confirmEntryDelete).toHaveBeenCalledWith(
+      '其中的工作要点也会一并删除。',
+      '删除这段工作经历？',
+      expect.objectContaining({ confirmButtonText: '删除', cancelButtonText: '取消' }),
+    )
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect((onChange.mock.lastCall![0] as ResumeDocument).sections[0]?.entries).toHaveLength(0)
+  })
+
+  it('deletes a bullet directly with complete accessible context', async () => {
+    const onChange = vi.fn()
+    const wrapper = mount(ResumeEditor, { props: { document: makeDocument(), onChange } })
+
+    const deleteButton = wrapper.get('.bullet-delete-action')
+    expect(deleteButton.text()).toBe('删除')
+    expect(deleteButton.attributes('aria-label')).toBe('删除某科技有限公司中的第 1 条工作要点')
+    await deleteButton.trigger('click')
+
+    const changed = onChange.mock.lastCall![0] as ResumeDocument
+    expect(changed.sections[0]?.entries[0]?.bullets).toEqual([])
+  })
+
+  it('keeps supplemental basics information explicit instead of using an overflow label', async () => {
     const wrapper = mount(ResumeEditor, { props: { document: makeDocument() } })
 
-    await wrapper.get('.entry-more summary').trigger('click')
-    expect(wrapper.get('.entry-more-menu').text()).toContain('编辑详情')
-    expect(wrapper.get('.entry-more-menu').text()).toContain('删除此条目')
-
-    await wrapper.findAll('.entry-more-menu button')[0]!.trigger('click')
-    expect(wrapper.get('.entry-inline-editor').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('添加职位、时间或地点')
+    expect(wrapper.get('.basics-details summary').text()).toBe('补充信息')
+    expect(wrapper.text()).not.toContain('···')
+    await wrapper.get('.basics-details summary').trigger('click')
+    expect(wrapper.get('.basics-details-menu').text()).toContain('求职意向')
+    expect(wrapper.get('.basics-details-menu').text()).toContain('最高学历')
   })
 
   it('shows duplicate contact values and blank drafts only once', () => {
@@ -528,6 +567,20 @@ describe('ResumeEditor', () => {
     expect((onChange.mock.lastCall![0] as ResumeDocument).sections[1]?.entries[0]?.bullets[0]?.id).toBe('b1')
     wrapper.unmount()
     vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('does not start section reorder when a bullet delete action receives pointerdown', async () => {
+    vi.useFakeTimers()
+    const document = makeDocument()
+    document.sections.push({ id: 's2', kind: 'PROJECT', title: '项目经历', entries: [] })
+    const wrapper = mount(ResumeEditor, { props: { document } })
+
+    await wrapper.get('.bullet-delete-action').trigger('pointerdown', { pointerId: 1, pointerType: 'mouse', button: 0 })
+    await vi.advanceTimersByTimeAsync(230)
+    expect(wrapper.get('[data-section-id="s1"]').classes()).not.toContain('is-reorder-source')
+
+    wrapper.unmount()
     vi.useRealTimers()
   })
 

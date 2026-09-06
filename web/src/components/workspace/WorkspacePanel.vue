@@ -181,7 +181,7 @@ const confirmRestore = async () => {
   try {
     await ElMessageBox.confirm(
       '将用本次优化开始前的简历内容覆盖当前编辑版本，并保存为新的版本。是否继续？',
-      '恢复本次优化前版本',
+      '恢复优化前版本',
       { confirmButtonText: '恢复', cancelButtonText: '取消', type: 'warning' },
     )
   } catch {
@@ -424,10 +424,10 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
           <details class="workspace-mobile-more">
             <summary>更多</summary>
             <div class="workspace-more-menu">
-              <button type="button" :disabled="editor.status.value === 'saving'" @click="editor.undo()">
+              <button type="button" :disabled="!editor.canUndo.value || editor.status.value === 'saving'" @click="editor.undo()">
                 撤销
               </button>
-              <button type="button" :disabled="editor.status.value === 'saving'" @click="editor.redo()">
+              <button type="button" :disabled="!editor.canRedo.value || editor.status.value === 'saving'" @click="editor.redo()">
                 重做
               </button>
               <button type="button" :disabled="editor.status.value === 'saving'" @click="confirmRestore">
@@ -483,18 +483,14 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
                 >
                   分析详情
                 </button>
-                <details class="workspace-more">
-                  <summary aria-label="更多文档操作">···</summary>
-                  <div class="workspace-more-menu">
-                    <button
-                      type="button"
-                      :disabled="editor.status.value === 'saving'"
-                      @click="confirmRestore"
-                    >
-                      {{ restoring ? '正在恢复…' : '恢复优化前版本' }}
-                    </button>
-                  </div>
-                </details>
+                <button
+                  type="button"
+                  class="toolbar-button toolbar-button-restore"
+                  :disabled="editor.status.value === 'saving'"
+                  @click="confirmRestore"
+                >
+                  {{ restoring ? '正在恢复…' : '恢复版本' }}
+                </button>
               </div>
             </div>
             <div class="resume-stage-scroll">
@@ -619,36 +615,15 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
 .toolbar-button:disabled {
   color: var(--app-text-muted);
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.42;
+}
+
+.toolbar-button-restore {
+  font-weight: 600;
 }
 
 .toolbar-button-accent {
   color: var(--app-primary-active);
-}
-
-.workspace-more,
-.workspace-more summary {
-  position: relative;
-}
-
-.workspace-more summary {
-  list-style: none;
-  min-height: 30px;
-  padding: 7px 9px;
-  color: var(--app-text-secondary);
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.workspace-more summary::-webkit-details-marker {
-  display: none;
-}
-
-.workspace-more summary:hover,
-.workspace-more summary:focus-visible {
-  color: var(--app-text);
-  background: var(--app-surface-soft);
 }
 
 .workspace-more-menu {

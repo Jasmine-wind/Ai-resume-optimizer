@@ -216,8 +216,15 @@ test.describe('Workspace editor frame', () => {
       await expect(page.getByText('简历正文', { exact: true })).toBeVisible()
       await expect(page.getByText('✓ 已保存', { exact: true })).toBeVisible()
       await expect(page.locator('.workspace-inspector')).toBeHidden()
+      await expect(page.locator('.workspace-more')).toHaveCount(0)
+      await expect(page.locator('.entry-more, .bullet-more, .basics-more')).toHaveCount(0)
+      await expect(page.getByRole('button', { name: '恢复版本', exact: true })).toBeVisible()
+      await expect(page.getByText('补充信息', { exact: true })).toBeVisible()
       await page.locator('.bullet-line').first().hover()
       await expect(page.getByRole('button', { name: 'AI 优化', exact: true }).first()).toBeVisible()
+      await expect(page.getByRole('button', { name: '删除某科技公司中的第 1 条工作要点', exact: true })).toBeVisible()
+      await page.locator('.editor-entry').first().hover()
+      await expect(page.getByRole('button', { name: '删除条目：某科技公司', exact: true })).toBeVisible()
       await expect(page.locator('.editor-section.is-focused')).toBeVisible()
       await expect(page.locator('.bullet-block.is-evidence-focus')).toHaveCount(1)
       const section = page.locator('.editor-section').first()
@@ -291,6 +298,38 @@ test.describe('Workspace editor frame', () => {
 
     await page.getByRole('button', { name: '拒绝' }).click()
     await expect(page.getByText('建议版本', { exact: true })).toBeHidden()
+  })
+
+  test('deletes a bullet directly and restores it through Undo', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockWorkspace(page)
+    await page.goto('/workspace/42?requirement=3')
+
+    const bullet = page.locator('[data-bullet-id="bullet-0"]')
+    await bullet.hover()
+    await bullet.getByRole('button', { name: '删除某科技公司中的第 1 条工作要点', exact: true }).click()
+    await expect(page.locator('[data-bullet-id="bullet-0"]')).toHaveCount(0)
+    await page.getByRole('button', { name: '撤销', exact: true }).click()
+    await expect(page.locator('[data-bullet-id="bullet-0"]')).toHaveCount(1)
+  })
+
+  test('confirms entry deletion while keeping direct entry editing available', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 768 })
+    await mockWorkspace(page)
+    await page.goto('/workspace/42?requirement=3')
+
+    const entry = page.locator('[data-entry-id="exp-1"]')
+    await entry.hover()
+    await entry.getByRole('button', { name: '删除条目：某科技公司', exact: true }).click()
+    await expect(page.getByText('删除这段工作经历？', { exact: true })).toBeVisible()
+    await expect(page.getByText('其中的工作要点也会一并删除。', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: '取消', exact: true }).click()
+    await expect(entry).toBeVisible()
+
+    await entry.hover()
+    await entry.getByRole('button', { name: '删除条目：某科技公司', exact: true }).click()
+    await page.locator('.el-message-box__btns').getByRole('button', { name: '删除', exact: true }).click()
+    await expect(page.locator('[data-entry-id="exp-1"]')).toHaveCount(0)
   })
 
   test('shows save failure recovery without changing the save API', async ({ page }) => {
@@ -421,5 +460,11 @@ test.describe('Workspace editor frame', () => {
     await expect(page.locator('.workspace-inspector')).toBeVisible()
     await expect(page.locator('.workspace-inspector').getByText('岗位要求', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: '分析详情' })).toHaveCount(0)
+
+    await page.getByRole('tab', { name: '编辑简历' }).click()
+    await page.locator('.workspace-mobile-more summary').click()
+    await expect(page.locator('.workspace-more-menu')).toContainText('撤销')
+    await expect(page.locator('.workspace-more-menu')).toContainText('重做')
+    await expect(page.locator('.workspace-more-menu')).toContainText('恢复优化前版本')
   })
 })

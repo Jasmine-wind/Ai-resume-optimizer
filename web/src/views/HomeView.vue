@@ -7,7 +7,7 @@ import ErrorState from '@/components/common/ErrorState.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { retryJobAnalysis, startJobAnalysis } from '@/api/job-analysis'
 import { getJobDirectionInsights } from '@/api/job-direction-insight'
-import { getRecentOptimizationTasks } from '@/api/optimization-tasks'
+import { deleteOptimizationTask, getRecentOptimizationTasks } from '@/api/optimization-tasks'
 import type { OptimizationTask } from '@/types/optimization-task'
 import { getResumeList, requestResumePreparation, uploadResume } from '@/api/resume'
 import { startAsyncTaskPolling } from '@/utils/asyncTaskPolling'
@@ -53,6 +53,7 @@ const hasJobDirectionInsight = ref(false)
 const recentTasks = ref<OptimizationTask[]>([])
 const recentTasksFailed = ref(false)
 const recentTasksLoading = ref(false)
+const deletingTaskId = ref<number | null>(null)
 let analysisPolling: AsyncTaskPollingController | null = null
 const preparationPolling = new Map<number, AsyncTaskPollingController>()
 
@@ -425,6 +426,36 @@ const loadRecentTasks = async () => {
 const taskStatusLabel = (status: string) => ({ PENDING: '分析中', RUNNING: '分析中', SUCCESS: '已完成', FAILED: '分析失败', CANCELLED: '已取消' }[status] || '分析中')
 const taskTime = (value?: string) => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : ''
 
+const deleteRecentTask = async (task: OptimizationTask) => {
+  if (deletingTaskId.value !== null) return
+  try {
+    await ElMessageBox.confirm(
+      '删除后将无法从“最近优化”继续打开该岗位版本。原始简历不会被删除。',
+      '删除这条岗位优化记录？',
+      {
+        type: 'warning',
+        confirmButtonText: '删除记录',
+        cancelButtonText: '取消',
+      },
+    )
+  } catch {
+    return
+  }
+
+  deletingTaskId.value = task.optimizationTaskId
+  try {
+    await deleteOptimizationTask(task.optimizationTaskId)
+    recentTasks.value = recentTasks.value.filter(
+      (item) => item.optimizationTaskId !== task.optimizationTaskId,
+    )
+    ElMessage.success('已删除岗位优化记录')
+  } catch {
+    ElMessage.error('删除失败，请稍后重试')
+  } finally {
+    deletingTaskId.value = null
+  }
+}
+
 onMounted(async () => {
   await loadResumes(preferredResumeId.value)
   const pendingResumes = resumes.value.filter(
@@ -666,9 +697,35 @@ onUnmounted(() => {
       <p v-else-if="recentTasksFailed">暂时无法读取最近优化 <button type="button" @click="loadRecentTasks">重新加载</button></p>
       <p v-else-if="!recentTasks.length">还没有岗位优化记录。完成第一次岗位分析后，可以从这里继续之前的工作。</p>
       <article v-for="task in recentTasks" :key="task.optimizationTaskId" class="recent-task">
-        <div><strong>{{ task.jobTitle || '未命名岗位' }}</strong><span>{{ task.resumeName }} · {{ taskTime(task.updatedAt || task.createdAt) }}</span><small>{{ taskStatusLabel(task.status) }}</small></div>
-        <el-button v-if="task.status === 'SUCCESS'" link type="primary" @click="router.push({ name: 'job-analysis', params: { optimizationTaskId: task.optimizationTaskId } })">继续</el-button>
-        <el-button v-else-if="task.status === 'FAILED'" link type="primary" @click="retryJobAnalysis(task.optimizationTaskId).then(loadRecentTasks)">重新分析</el-button>
+        <div class="recent-task-copy">
+          <strong>{{ task.jobTitle || '未命名岗位' }}</strong>
+          <span>{{ task.resumeName }} · {{ taskTime(task.updatedAt || task.createdAt) }}</span>
+          <small>{{ taskStatusLabel(task.status) }}</small>
+        </div>
+        <div class="recent-task-actions">
+          <el-button
+            v-if="task.status === 'SUCCESS'"
+            link
+            type="primary"
+            :disabled="deletingTaskId === task.optimizationTaskId"
+            @click="router.push({ name: 'job-analysis', params: { optimizationTaskId: task.optimizationTaskId } })"
+          >继续</el-button>
+          <el-button
+            v-else-if="task.status === 'FAILED'"
+            link
+            type="primary"
+            :disabled="deletingTaskId === task.optimizationTaskId"
+            @click="retryJobAnalysis(task.optimizationTaskId).then(loadRecentTasks)"
+          >重新分析</el-button>
+          <el-button
+            link
+            class="recent-task-delete"
+            :loading="deletingTaskId === task.optimizationTaskId"
+            :disabled="deletingTaskId !== null"
+            :aria-label="`删除岗位优化记录：${task.jobTitle || '未命名岗位'}`"
+            @click="deleteRecentTask(task)"
+          >删除</el-button>
+        </div>
       </article>
     </section>
 
@@ -1068,10 +1125,17 @@ onUnmounted(() => {
   padding: var(--app-space-3) 0;
 }
 
-.recent-task > div {
+.recent-task-copy {
   display: grid;
   min-width: 0;
   gap: var(--app-space-1);
+}
+
+.recent-task-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--app-space-2);
 }
 
 .recent-task strong,
@@ -1083,6 +1147,16 @@ onUnmounted(() => {
 .recent-task strong { color: var(--app-text); font-size: var(--app-font-size-md); }
 .recent-task span { color: var(--app-text-secondary); font-size: var(--app-font-size-sm); }
 .recent-task small { color: var(--app-text-muted); font-size: var(--app-font-size-xs); }
+
+.recent-task-delete {
+  color: var(--app-text-muted) !important;
+  font-size: var(--app-font-size-xs);
+}
+
+.recent-task-delete:hover,
+.recent-task-delete:focus-visible {
+  color: var(--app-danger) !important;
+}
 
 .home-library-link,
 .home-insight-row {
@@ -1153,7 +1227,7 @@ onUnmounted(() => {
     flex-direction: column;
   }
 
-  .recent-task .el-button {
+  .recent-task-actions {
     align-self: flex-start;
   }
 

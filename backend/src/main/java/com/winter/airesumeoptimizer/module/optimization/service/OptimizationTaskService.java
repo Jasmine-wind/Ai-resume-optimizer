@@ -40,6 +40,9 @@ public interface OptimizationTaskService {
 
     OptimizationTaskVO get(Long userId, Long optimizationTaskId);
 
+    /** 删除当前用户的一条岗位优化记录，不删除源简历。 */
+    void delete(Long userId, Long optimizationTaskId);
+
     java.util.List<OptimizationTaskVO> listRecent(Long userId, int limit);
 
     /** Returns only the task-frozen SOURCE document; never falls back to the resume's current canonical pointer. */

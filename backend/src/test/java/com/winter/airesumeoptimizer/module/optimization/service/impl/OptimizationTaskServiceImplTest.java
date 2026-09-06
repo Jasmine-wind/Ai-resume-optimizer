@@ -14,6 +14,7 @@ import com.winter.airesumeoptimizer.infra.ai.AiSelectionSnapshot;
 import com.winter.airesumeoptimizer.infra.ai.AiSource;
 import com.winter.airesumeoptimizer.module.analysis.mapper.AiJobMatchResultMapper;
 import com.winter.airesumeoptimizer.module.evidence.entity.EvidenceAnalysis;
+import com.winter.airesumeoptimizer.module.export.service.ExportArtifactCleanupService;
 import com.winter.airesumeoptimizer.module.job.entity.JobDescription;
 import com.winter.airesumeoptimizer.module.job.mapper.JobDescriptionMapper;
 import com.winter.airesumeoptimizer.module.job.service.JobDescriptionService;
@@ -45,6 +46,7 @@ class OptimizationTaskServiceImplTest {
     private final ResumeVersionMapper resumeVersionMapper = mock(ResumeVersionMapper.class);
     private final OptimizationTaskMapper optimizationTaskMapper = mock(OptimizationTaskMapper.class);
     private final AiJobMatchResultMapper aiJobMatchResultMapper = mock(AiJobMatchResultMapper.class);
+    private final ExportArtifactCleanupService exportArtifactCleanupService = mock(ExportArtifactCleanupService.class);
     private final OptimizationTaskServiceImpl service = new OptimizationTaskServiceImpl(
             resumeMapper,
             resumeParseResultMapper,
@@ -54,6 +56,7 @@ class OptimizationTaskServiceImplTest {
             resumeVersionMapper,
             optimizationTaskMapper,
             aiJobMatchResultMapper,
+            exportArtifactCleanupService,
             new ObjectMapper());
 
     private Resume resume;
@@ -99,6 +102,22 @@ class OptimizationTaskServiceImplTest {
             task.setId(50L);
             return 1;
         });
+    }
+
+    @Test
+    void deleteRemovesOnlyTheTaskAndTargetVersionWithoutTouchingTheSourceResume() {
+        OptimizationTask stored = task("SUCCESS");
+        when(optimizationTaskMapper.selectOne(any())).thenReturn(stored);
+        when(optimizationTaskMapper.delete(any())).thenReturn(1);
+        when(optimizationTaskMapper.selectCount(any())).thenReturn(0L);
+        when(resumeVersionMapper.selectCount(any())).thenReturn(0L);
+
+        service.delete(1L, stored.getId());
+
+        verify(exportArtifactCleanupService).deleteArtifactsForOptimizationTask(1L, stored.getId());
+        verify(optimizationTaskMapper).delete(any());
+        verify(resumeVersionMapper).delete(any());
+        verify(resumeMapper, never()).delete(any());
     }
 
     @Test

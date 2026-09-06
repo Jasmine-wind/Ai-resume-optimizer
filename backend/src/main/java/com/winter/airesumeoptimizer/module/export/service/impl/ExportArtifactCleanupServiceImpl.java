@@ -70,6 +70,19 @@ public class ExportArtifactCleanupServiceImpl implements ExportArtifactCleanupSe
     }
 
     @Override
+    public void deleteArtifactsForOptimizationTask(Long userId, Long optimizationTaskId) {
+        if (userId == null || optimizationTaskId == null) {
+            return;
+        }
+        List<ExportArtifact> artifacts = exportArtifactMapper.selectList(new LambdaQueryWrapper<ExportArtifact>()
+                .eq(ExportArtifact::getUserId, userId)
+                .eq(ExportArtifact::getOptimizationTaskId, optimizationTaskId));
+        for (ExportArtifact artifact : artifacts) {
+            deleteStorageAndRecord(artifact);
+        }
+    }
+
+    @Override
     public void deleteArtifactsForJobDescription(Long userId, Long jobDescriptionId) {
         if (userId == null || jobDescriptionId == null) {
             return;

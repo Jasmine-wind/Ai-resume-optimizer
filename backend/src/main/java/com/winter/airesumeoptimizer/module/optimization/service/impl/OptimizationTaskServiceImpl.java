@@ -12,6 +12,7 @@ import com.winter.airesumeoptimizer.infra.ai.AiSource;
 import com.winter.airesumeoptimizer.module.analysis.entity.AiJobMatchResult;
 import com.winter.airesumeoptimizer.module.analysis.mapper.AiJobMatchResultMapper;
 import com.winter.airesumeoptimizer.module.evidence.entity.EvidenceAnalysis;
+import com.winter.airesumeoptimizer.module.export.service.ExportArtifactCleanupService;
 import com.winter.airesumeoptimizer.module.job.dto.JobDescriptionSubmitDTO;
 import com.winter.airesumeoptimizer.module.job.entity.JobDescription;
 import com.winter.airesumeoptimizer.module.job.mapper.JobDescriptionMapper;
@@ -63,6 +64,7 @@ public class OptimizationTaskServiceImpl implements OptimizationTaskService {
     private final ResumeVersionMapper resumeVersionMapper;
     private final OptimizationTaskMapper optimizationTaskMapper;
     private final AiJobMatchResultMapper aiJobMatchResultMapper;
+    private final ExportArtifactCleanupService exportArtifactCleanupService;
     private final ObjectMapper objectMapper;
 
     public OptimizationTaskServiceImpl(
@@ -74,6 +76,7 @@ public class OptimizationTaskServiceImpl implements OptimizationTaskService {
             ResumeVersionMapper resumeVersionMapper,
             OptimizationTaskMapper optimizationTaskMapper,
             AiJobMatchResultMapper aiJobMatchResultMapper,
+            ExportArtifactCleanupService exportArtifactCleanupService,
             ObjectMapper objectMapper) {
         this.resumeMapper = resumeMapper;
         this.resumeParseResultMapper = resumeParseResultMapper;
@@ -83,6 +86,7 @@ public class OptimizationTaskServiceImpl implements OptimizationTaskService {
         this.resumeVersionMapper = resumeVersionMapper;
         this.optimizationTaskMapper = optimizationTaskMapper;
         this.aiJobMatchResultMapper = aiJobMatchResultMapper;
+        this.exportArtifactCleanupService = exportArtifactCleanupService;
         this.objectMapper = objectMapper;
     }
 
@@ -156,6 +160,47 @@ public class OptimizationTaskServiceImpl implements OptimizationTaskService {
         JobTarget jobTarget = getOwnedJobTarget(userId, task.getJobTargetId());
         Resume resume = getOwnedResume(userId, sourceVersion.getResumeId());
         return toVO(task, sourceVersion, jobTarget, resume);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long userId, Long optimizationTaskId) {
+        OptimizationTask task = getOwnedTask(userId, optimizationTaskId);
+        Long targetVersionId = task.getTargetResumeVersionId();
+        Long jobTargetId = task.getJobTargetId();
+
+        // ExportArtifact 的数据库级联不会删除对象存储文件，必须先走正式清理 seam。
+        exportArtifactCleanupService.deleteArtifactsForOptimizationTask(userId, task.getId());
+
+        int taskRows = optimizationTaskMapper.delete(new LambdaQueryWrapper<OptimizationTask>()
+                .eq(OptimizationTask::getId, task.getId())
+                .eq(OptimizationTask::getUserId, userId));
+        if (taskRows != 1) {
+            throw new BusinessException(404, "优化任务不存在");
+        }
+
+        // TARGET 只属于这条任务；删除它不会触碰 SOURCE / 原始简历。
+        if (targetVersionId != null) {
+            resumeVersionMapper.delete(new LambdaQueryWrapper<ResumeVersion>()
+                    .eq(ResumeVersion::getId, targetVersionId)
+                    .eq(ResumeVersion::getUserId, userId)
+                    .eq(ResumeVersion::getVersionType, VERSION_TARGETED));
+        }
+
+        // JobTarget 可能被同一岗位的其它任务复用，只在确认没有其它派生数据时清理它。
+        if (jobTargetId != null) {
+            long remainingTasks = optimizationTaskMapper.selectCount(new LambdaQueryWrapper<OptimizationTask>()
+                    .eq(OptimizationTask::getUserId, userId)
+                    .eq(OptimizationTask::getJobTargetId, jobTargetId));
+            long remainingVersions = resumeVersionMapper.selectCount(new LambdaQueryWrapper<ResumeVersion>()
+                    .eq(ResumeVersion::getUserId, userId)
+                    .eq(ResumeVersion::getJobTargetId, jobTargetId));
+            if (remainingTasks == 0 && remainingVersions == 0) {
+                jobTargetMapper.delete(new LambdaQueryWrapper<JobTarget>()
+                        .eq(JobTarget::getId, jobTargetId)
+                        .eq(JobTarget::getUserId, userId));
+            }
+        }
     }
 
     @Override

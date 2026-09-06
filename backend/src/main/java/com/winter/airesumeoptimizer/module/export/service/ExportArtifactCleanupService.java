@@ -12,5 +12,8 @@ public interface ExportArtifactCleanupService {
 
     void deleteArtifactsForResume(Long userId, Long resumeId);
 
+    /** 清理单个岗位优化任务生成的 PDF 派生物，供任务删除前调用。 */
+    void deleteArtifactsForOptimizationTask(Long userId, Long optimizationTaskId);
+
     void deleteArtifactsForJobDescription(Long userId, Long jobDescriptionId);
 }

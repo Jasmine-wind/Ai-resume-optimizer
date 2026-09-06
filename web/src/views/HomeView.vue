@@ -114,10 +114,12 @@ const composerActionText = computed(() => {
   if (canStart.value) return `将使用「${selectedResumeFilename.value}」核对这份岗位描述。`
   if (analysisRunning.value) return '当前岗位分析正在进行。'
   if (activeAnalysis.value && analysisError.value) return `${analysisStateTitle.value}。`
+  if (startBlockReason.value === '请粘贴目标岗位 JD') return '粘贴完整岗位描述后即可开始核对。'
   return getStartBlockMessage(startBlockReason.value)
 })
 const composerActionDetail = computed(() => {
-  if (canStart.value) return '只依据当前简历材料，不自动添加未经确认的经历。'
+  if (canStart.value) return '只依据当前简历材料。'
+  if (startBlockReason.value === '请粘贴目标岗位 JD') return ''
   if (analysisRunning.value) return currentStage.value
   if (activeAnalysis.value && analysisError.value) {
     return analysisTimedOut.value ? '可以继续等待，或稍后回到首页查看。' : '当前任务已保留，可以直接重试。'
@@ -424,6 +426,7 @@ const loadRecentTasks = async () => {
   finally { recentTasksLoading.value = false }
 }
 const taskStatusLabel = (status: string) => ({ PENDING: '分析中', RUNNING: '分析中', SUCCESS: '已完成', FAILED: '分析失败', CANCELLED: '已取消' }[status] || '分析中')
+const taskStatusTone = (status: string) => ({ PENDING: 'pending', RUNNING: 'running', SUCCESS: 'success', FAILED: 'failed', CANCELLED: 'cancelled' }[status] || 'pending')
 const taskTime = (value?: string) => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : ''
 
 const deleteRecentTask = async (task: OptimizationTask) => {
@@ -486,9 +489,8 @@ onUnmounted(() => {
 <template>
   <section class="home-page">
     <PageHeader
-      eyebrow="新建岗位任务"
-      title="开始一次岗位定向"
-      description="选择一份已确认的简历，粘贴目标岗位 JD。系统会先拆解岗位要求，再回到当前材料逐条核对。"
+      title="针对一个岗位优化简历"
+      description="选择一份已确认的简历，粘贴目标岗位 JD，系统会逐条核对岗位要求与当前材料。"
     />
     <SkeletonBlock v-if="loading && !resumes.length" title :rows="5" />
 
@@ -533,7 +535,6 @@ onUnmounted(() => {
                 <strong>{{ displayNameFor(resume) }}</strong>
                 <small>{{ resume.fileType }} · {{ statusForResume(resume).label }} · {{ resume.originalFilename }}</small>
               </span>
-              <span v-if="selectedResumeId === resume.id" class="home-option-check">已选</span>
             </label>
           </div>
 
@@ -615,7 +616,7 @@ onUnmounted(() => {
               id="home-jd"
               v-model="jobDescription"
               type="textarea"
-              :rows="14"
+              :rows="10"
               maxlength="10000"
               show-word-limit
               resize="vertical"
@@ -635,9 +636,9 @@ onUnmounted(() => {
 
       <footer class="home-task-bar">
         <div id="home-start-status" class="home-action-summary" aria-live="polite">
-          <span class="home-action-label">{{ composerActionLabel }}</span>
+          <span v-if="analysisRunning || (activeAnalysis && analysisError)" class="home-action-label">{{ composerActionLabel }}</span>
           <strong>{{ composerActionText }}</strong>
-          <span>{{ composerActionDetail }}</span>
+          <span v-if="composerActionDetail">{{ composerActionDetail }}</span>
         </div>
         <div class="home-start-actions-buttons">
           <el-button
@@ -698,9 +699,11 @@ onUnmounted(() => {
       <p v-else-if="!recentTasks.length">还没有岗位优化记录。完成第一次岗位分析后，可以从这里继续之前的工作。</p>
       <article v-for="task in recentTasks" :key="task.optimizationTaskId" class="recent-task">
         <div class="recent-task-copy">
-          <strong>{{ task.jobTitle || '未命名岗位' }}</strong>
+          <div class="recent-task-primary">
+            <strong>{{ task.jobTitle || '未命名岗位' }}</strong>
+            <small class="recent-task-status" :class="`is-${taskStatusTone(task.status)}`">{{ taskStatusLabel(task.status) }}</small>
+          </div>
           <span>{{ task.resumeName }} · {{ taskTime(task.updatedAt || task.createdAt) }}</span>
-          <small>{{ taskStatusLabel(task.status) }}</small>
         </div>
         <div class="recent-task-actions">
           <el-button
@@ -891,12 +894,6 @@ onUnmounted(() => {
 
 .home-resume-option.is-selected .home-option-dot {
   background: var(--app-primary);
-}
-
-.home-option-check {
-  color: var(--app-primary-active);
-  font-size: var(--app-font-size-xs);
-  font-weight: 700;
 }
 
 .home-upload-trigger {
@@ -1122,13 +1119,22 @@ onUnmounted(() => {
   gap: var(--app-space-4);
   min-width: 0;
   border-top: 1px solid var(--app-border-soft);
-  padding: var(--app-space-3) 0;
+  padding: var(--app-space-2) 0;
 }
 
 .recent-task-copy {
   display: grid;
+  flex: 1 1 auto;
   min-width: 0;
-  gap: var(--app-space-1);
+  gap: 2px;
+}
+
+.recent-task-primary {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
 }
 
 .recent-task-actions {
@@ -1146,11 +1152,32 @@ onUnmounted(() => {
 
 .recent-task strong { color: var(--app-text); font-size: var(--app-font-size-md); }
 .recent-task span { color: var(--app-text-secondary); font-size: var(--app-font-size-sm); }
-.recent-task small { color: var(--app-text-muted); font-size: var(--app-font-size-xs); }
+.recent-task-status {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+  font-size: var(--app-font-size-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.recent-task-status.is-success { color: var(--app-status-supported); }
+.recent-task-status.is-pending,
+.recent-task-status.is-running { color: var(--app-status-partial); }
+.recent-task-status.is-failed { color: var(--app-danger); }
+.recent-task-status.is-cancelled { color: var(--app-text-muted); }
 
 .recent-task-delete {
   color: var(--app-text-muted) !important;
   font-size: var(--app-font-size-xs);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, color 160ms ease;
+}
+
+.recent-task:hover .recent-task-delete,
+.recent-task:focus-within .recent-task-delete {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .recent-task-delete:hover,
@@ -1231,6 +1258,11 @@ onUnmounted(() => {
     align-self: flex-start;
   }
 
+  .recent-task-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .home-start-actions-buttons {
     justify-content: stretch;
   }
@@ -1260,6 +1292,7 @@ onUnmounted(() => {
 
 .home-page :deep(.ui-page-header p:not(.ui-page-eyebrow)) {
   max-width: 650px;
+  margin-top: 4px;
 }
 
 .home-composer {
@@ -1272,13 +1305,13 @@ onUnmounted(() => {
 
 .home-composer-grid {
   grid-template-columns: minmax(300px, 0.38fr) minmax(0, 0.62fr);
-  min-height: 470px;
+  min-height: 0;
 }
 
 .home-source-column,
 .home-target-column {
-  gap: 20px;
-  padding: 30px 32px;
+  gap: var(--app-space-4);
+  padding: var(--app-space-6);
 }
 
 .home-source-column {
@@ -1373,7 +1406,7 @@ onUnmounted(() => {
 
 .home-resume-option {
   position: relative;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-columns: 18px minmax(0, 1fr);
   gap: 12px;
   min-height: 62px;
   box-sizing: border-box;
@@ -1426,14 +1459,6 @@ onUnmounted(() => {
 
 .home-option-copy small {
   font-size: 11px;
-}
-
-.home-option-check {
-  align-self: center;
-  color: var(--app-primary-active);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
 }
 
 .home-empty-source {
@@ -1571,8 +1596,8 @@ onUnmounted(() => {
 
 .home-jd-field :deep(.el-textarea),
 .home-jd-field :deep(.el-textarea__inner) {
-  height: 100%;
-  min-height: 330px !important;
+  height: 220px;
+  min-height: 220px !important;
 }
 
 .home-jd-field :deep(.el-textarea__inner) {
@@ -1611,15 +1636,15 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 28px;
-  padding: 18px 32px;
+  gap: var(--app-space-6);
+  padding: var(--app-space-4) var(--app-space-6);
   border-top: 1px solid var(--app-border-strong);
   background: var(--app-surface-soft);
 }
 
 .home-action-summary {
   display: grid;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -1730,7 +1755,7 @@ onUnmounted(() => {
 
   .home-jd-field :deep(.el-textarea),
   .home-jd-field :deep(.el-textarea__inner) {
-    min-height: 290px !important;
+    min-height: 220px !important;
   }
 
   .home-task-bar {
@@ -1745,13 +1770,6 @@ onUnmounted(() => {
 
   .home-resume-option {
     grid-template-columns: 18px minmax(0, 1fr);
-  }
-
-  .home-option-check {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: start;
-    margin-top: -5px;
   }
 
   .home-start-actions-buttons {
@@ -1836,8 +1854,8 @@ onUnmounted(() => {
 
   .home-jd-field :deep(.el-textarea),
   .home-jd-field :deep(.el-textarea__inner) {
-    height: auto;
-    min-height: 290px !important;
+    height: 220px;
+    min-height: 220px !important;
   }
 
   .home-task-bar {
@@ -1852,13 +1870,6 @@ onUnmounted(() => {
 
   .home-resume-option {
     grid-template-columns: 18px minmax(0, 1fr);
-  }
-
-  .home-option-check {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: start;
-    margin-top: -5px;
   }
 
   .home-start-actions-buttons {

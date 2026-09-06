@@ -44,6 +44,7 @@ async function mockShell(page: Page, resumes: unknown[]) {
   await page.route('**/api/job-direction-insights', (route) =>
     route.fulfill(response({ cohorts: [] })),
   )
+  await page.route('**/api/optimization-tasks/recent*', (route) => route.fulfill(response([])))
 }
 
 test.describe('Resume Library', () => {

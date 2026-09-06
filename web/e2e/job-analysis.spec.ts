@@ -408,7 +408,7 @@ test.describe('Job Analysis fixed evidence workspace', () => {
     await page.route('**/api/job-direction-insights', (route) => route.fulfill(response({ cohorts: [] })))
     await page.route('**/api/optimization-tasks/recent*', (route) => route.fulfill(response([])))
     await page.goto('/app')
-    await expect(page.getByRole('heading', { name: '开始一次岗位定向' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '针对一个岗位优化简历' })).toBeVisible()
     expect(await page.locator('.app-page').evaluate((element) => getComputedStyle(element).overflowY)).toBe('auto')
   })
 })

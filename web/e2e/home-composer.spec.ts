@@ -29,10 +29,20 @@ const response = (data: unknown) => ({
   body: JSON.stringify({ code: 200, message: 'success', data }),
 })
 
+const recentTask = (optimizationTaskId: number, status: string, jobTitle: string) => ({
+  optimizationTaskId,
+  jobTitle,
+  resumeName: '一页精简版',
+  status,
+  createdAt: '2026-01-01T10:00:00Z',
+  updatedAt: '2026-01-01T10:00:00Z',
+})
+
 async function mockHome(
   page: Page,
   resumes = [readyResume, reviewResume],
   insights: unknown = { cohorts: [] },
+  recentTasks: unknown[] = [],
 ) {
   await page.addInitScript(() => {
     window.localStorage.setItem('ai-resume-token', 'home-composer-test-token')
@@ -46,7 +56,7 @@ async function mockHome(
   })))
   await page.route('**/api/resumes', (route) => route.fulfill(response(resumes)))
   await page.route('**/api/job-direction-insights', (route) => route.fulfill(response(insights)))
-  await page.route('**/api/optimization-tasks/recent*', (route) => route.fulfill(response([])))
+  await page.route('**/api/optimization-tasks/recent*', (route) => route.fulfill(response(recentTasks)))
 }
 
 test.describe('Job Target Composer', () => {
@@ -54,11 +64,11 @@ test.describe('Job Target Composer', () => {
     await mockHome(page)
     await page.goto('/app')
 
-    await expect(page.getByRole('heading', { name: '开始一次岗位定向' })).toBeVisible()
-    await expect(page.locator('.ui-page-eyebrow')).toHaveText('新建岗位任务')
+    await expect(page.getByRole('heading', { name: '针对一个岗位优化简历' })).toBeVisible()
+    await expect(page.locator('.ui-page-eyebrow')).toHaveCount(0)
     await expect(page.getByRole('radio', { name: /林然-产品分析简历/ })).toBeChecked()
     await expect(page.getByTestId('home-start-analysis')).toBeDisabled()
-    await expect(page.locator('.home-action-summary strong')).toHaveText('请粘贴完整的目标岗位描述。')
+    await expect(page.locator('.home-action-summary strong')).toHaveText('粘贴完整岗位描述后即可开始核对。')
 
     await page.locator('label.home-resume-option').nth(1).click()
     await expect(page.getByRole('radio', { name: /resume-product-analytics/ })).toBeChecked()
@@ -69,12 +79,17 @@ test.describe('Job Target Composer', () => {
     await expect(page.locator('.el-input__count')).toHaveText('13 / 10000')
     await expect(page.locator('.home-resume-option.is-selected strong')).toHaveText('产品分析 · 待确认版')
     await expect(page.locator('.home-resume-option.is-selected small')).toContainText('resume-product-analytics-long-name.docx')
+    await expect(page.locator('.home-jd-field textarea')).toHaveAttribute('maxlength', '10000')
+    await expect(page.locator('.home-jd-field textarea')).toHaveCSS('resize', 'vertical')
     await expect(page.getByTestId('home-start-analysis')).toBeDisabled()
     await expect(page.locator('.home-action-summary strong')).toHaveText('这份简历有内容需要确认。')
 
     await page.locator('label.home-resume-option').first().click()
     await expect(page.getByTestId('home-start-analysis')).toBeEnabled()
-    await expect(page.locator('.home-action-label')).toHaveText('本次核对')
+    await expect(page.locator('.home-resume-option.is-selected')).toHaveClass(/is-selected/)
+    await expect(page.getByText('已选', { exact: true })).toHaveCount(0)
+    await expect(page.locator('.home-action-label')).toHaveCount(0)
+    await expect(page.locator('.home-action-summary strong')).toContainText('将使用')
   })
 
   test('starts one background analysis and locks the composer against duplicates', async ({ page }) => {
@@ -159,6 +174,73 @@ test.describe('Job Target Composer', () => {
     expect(taskBarBottom).toBeLessThanOrEqual(768)
     await expect(page.getByRole('heading', { name: '粘贴完整岗位描述' })).toBeVisible()
     await expect(page.locator('label.home-sr-only')).toHaveText('目标岗位 JD')
+  })
+
+  test('keeps the recent optimization heading and first task in the 1440px first viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const recentTasks = [1, 2, 3, 4, 5].map((id) =>
+      recentTask(id, 'SUCCESS', `Java 后端岗位 ${id}`),
+    )
+    await mockHome(page, [readyResume], { cohorts: [] }, recentTasks)
+    await page.goto('/app')
+
+    await expect(page.getByRole('heading', { name: '最近优化' })).toBeInViewport()
+    await expect(page.locator('.recent-task').first()).toBeInViewport()
+    await expect(page.locator('.recent-task').first()).toContainText('Java 后端岗位 1')
+    await expect(page.locator('.recent-task').first()).toContainText('已完成')
+    await expect(page.locator('.recent-task').first().getByRole('button', { name: '继续' })).toBeVisible()
+  })
+
+  test('keeps recent statuses textual and delete secondary on desktop, visible on mobile', async ({ page }) => {
+    const recentTasks = [
+      recentTask(1, 'SUCCESS', 'Java 后端工程师'),
+      recentTask(2, 'FAILED', '平台工程师'),
+      recentTask(3, 'RUNNING', '服务端工程师'),
+      recentTask(4, 'CANCELLED', '数据工程师'),
+    ]
+    await mockHome(page, [readyResume], { cohorts: [] }, recentTasks)
+    await page.route('**/api/optimization-tasks/1', (route) => route.fulfill(response(null)))
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/app')
+
+    await expect(page.locator('.recent-task').nth(0)).toContainText('已完成')
+    await expect(page.locator('.recent-task').nth(0).getByRole('button', { name: '继续' })).toBeVisible()
+    await expect(page.locator('.recent-task').nth(1)).toContainText('分析失败')
+    await expect(page.locator('.recent-task').nth(1).getByRole('button', { name: '重新分析' })).toBeVisible()
+    await expect(page.locator('.recent-task').nth(2)).toContainText('分析中')
+    await expect(page.locator('.recent-task').nth(3)).toContainText('已取消')
+
+    const desktopDelete = page.locator('.recent-task').first().getByRole('button', { name: /删除岗位优化记录/ })
+    await expect(desktopDelete).toHaveCSS('opacity', '0')
+    await page.locator('.recent-task').first().hover()
+    await expect(desktopDelete).toHaveCSS('opacity', '1')
+    await page.mouse.move(10, 10)
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(desktopDelete).toBeVisible()
+    await expect(desktopDelete).toHaveCSS('opacity', '1')
+    await expect(page.locator('.recent-task').nth(0).locator('.recent-task-primary')).toContainText('已完成')
+    const mobileShell = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(mobileShell.scrollWidth).toBeLessThanOrEqual(mobileShell.clientWidth)
+  })
+
+  test('deletes a recent optimization in place without changing the delete contract', async ({ page }) => {
+    await mockHome(page, [readyResume], { cohorts: [] }, [recentTask(1, 'SUCCESS', 'Java 后端工程师')])
+    await page.route('**/api/optimization-tasks/1', (route) => {
+      expect(route.request().method()).toBe('DELETE')
+      return route.fulfill(response(null))
+    })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/app')
+
+    const recent = page.locator('.recent-task').first()
+    await recent.getByRole('button', { name: /删除岗位优化记录/ }).click()
+    await expect(page.getByRole('dialog')).toContainText('原始简历不会被删除')
+    await page.getByRole('button', { name: '删除记录', exact: true }).click()
+    await expect(page.locator('.recent-task')).toHaveCount(0)
   })
 
   test('shows the optional insight link only when the server reports a cohort', async ({ page }) => {

@@ -3,10 +3,10 @@
   --app-bg: #f3f0ea;
   --app-bg-soft: #ece8e1;
   --app-surface: #fffdf8;
-  --app-surface-soft: #f8f6f2;
+  --app-surface-soft: #f6f5f2;
   --app-pdf-canvas: #ece8e1;
-  --app-stage: #ece8e1;
-  --app-document: #fffdf8;
+  --app-stage: #eceae5;
+  --app-document: #fffefa;
 
   --app-primary: #a85c48;
   --app-primary-hover: #914b3b;
@@ -44,7 +44,10 @@
   --app-status-gap-soft: #f1e1da;
   --app-focus: #a85c48;
   --app-focus-soft: #f1e1da;
-  --app-ai-surface: #f8f6f2;
+  --app-ai: #607487;
+  --app-ai-soft: #eef2f4;
+  --app-ai-border: #cfd9de;
+  --app-ai-surface: var(--app-ai-soft);
 
   --app-radius-xl: 12px;
   --app-radius-lg: 8px;

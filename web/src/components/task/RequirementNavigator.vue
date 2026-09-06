@@ -45,7 +45,7 @@ const countByStatus = (matchLevel: string) =>
     <div class="rail-header">
       <div class="rail-title-line">
         <h2>岗位要求 · {{ requirements.length }}</h2>
-        <span class="rail-count">{{ countByStatus('MATCHED') }} 已支持 · {{ countByStatus('PARTIAL_EVIDENCE') + countByStatus('NO_EVIDENCE') }} 待完善</span>
+        <span class="rail-count">{{ countByStatus('MATCHED') }} 已支持 · {{ countByStatus('PARTIAL_EVIDENCE') + countByStatus('NO_EVIDENCE') }} 待处理</span>
       </div>
     </div>
 
@@ -107,7 +107,7 @@ const countByStatus = (matchLevel: string) =>
 .rail-title-line h2 {
   margin: 0;
   color: var(--app-text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 750;
   letter-spacing: -0.02em;
 }
@@ -121,8 +121,8 @@ const countByStatus = (matchLevel: string) =>
 .rail-count {
   flex: 0 0 auto;
   color: var(--app-text-muted);
-  font-size: 9px;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -149,18 +149,6 @@ const countByStatus = (matchLevel: string) =>
   transition: background 180ms ease;
 }
 
-.requirement-item::before {
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: 0;
-  width: 2px;
-  background: var(--app-primary);
-  content: '';
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
-
 .requirement-item:hover {
   background: var(--app-bg-soft);
 }
@@ -172,23 +160,8 @@ const countByStatus = (matchLevel: string) =>
 }
 
 .requirement-item.is-selected {
-  background: color-mix(in srgb, var(--app-primary-soft) 78%, var(--app-surface));
-}
-
-.requirement-item.is-supported:not(.is-selected) {
-  background: color-mix(in srgb, var(--app-status-supported-soft) 36%, transparent);
-}
-
-.requirement-item.is-needs-edit:not(.is-selected) {
-  background: color-mix(in srgb, var(--app-status-partial-soft) 30%, transparent);
-}
-
-.requirement-item.is-gap:not(.is-selected) {
-  background: color-mix(in srgb, var(--app-status-gap-soft) 24%, transparent);
-}
-
-.requirement-item.is-selected::before {
-  opacity: 1;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card), inset 3px 0 0 var(--app-primary);
 }
 
 .requirement-number {
@@ -198,13 +171,13 @@ const countByStatus = (matchLevel: string) =>
   margin-top: 1px;
   place-items: center;
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 650;
 }
 
 .requirement-item.is-selected .requirement-number {
-  color: var(--app-surface);
-  background: var(--app-primary-active);
+  color: var(--app-primary-active);
+  background: transparent;
 }
 
 .requirement-content {
@@ -216,9 +189,9 @@ const countByStatus = (matchLevel: string) =>
   overflow: hidden;
   margin-bottom: 5px;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  line-height: 1.35;
+  line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -229,7 +202,7 @@ const countByStatus = (matchLevel: string) =>
   gap: 5px;
   margin-top: 0;
   color: var(--app-text-muted);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .requirement-item.is-selected .requirement-meta {
@@ -286,11 +259,11 @@ const countByStatus = (matchLevel: string) =>
   }
 
   .rail-title-line h2 {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .rail-count {
-    font-size: 8px;
+    font-size: 11px;
   }
 
   .requirement-list {

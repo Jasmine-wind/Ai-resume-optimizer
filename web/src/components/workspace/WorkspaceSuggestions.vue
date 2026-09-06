@@ -17,7 +17,6 @@ const props = defineProps<{
   selectedRequirementId?: number | null
   document?: ResumeDocument | null
   suggest?: BulletSuggestController | null
-  locationLabel?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -85,8 +84,6 @@ const statusClass = (value: string) => {
 }
 
 const importanceLabel = (value: string) => (value === 'BONUS' ? '加分项' : '必需项')
-const evidenceLocation = (sectionLabel: string | null) => sectionLabel || '简历材料'
-
 const suggestionMode = computed(() => {
   const controller = props.suggest
   if (!controller || controller.phase.value === 'idle') return null
@@ -116,19 +113,13 @@ const activeBulletText = computed(() => {
   >
     <div class="inspector-scroll">
       <header class="inspector-header">
-        <div v-if="suggestionMode" class="inspector-ref">
+        <div v-if="suggestionMode" class="inspector-ref inspector-ref-ai">
           <span>AI 优化</span>
           <span class="inspector-ref-dot" aria-hidden="true" />
           <span>当前工作要点</span>
         </div>
         <div v-else class="inspector-ref">
-          <span v-if="selected">当前修改上下文 · {{ String(requirements.indexOf(selected) + 1).padStart(2, '0') }}</span>
-          <span class="inspector-ref-dot" aria-hidden="true" />
-          <span v-if="selected" :class="['inspector-status', statusClass(selected.matchLevel)]">
-            {{ statusLabel(selected.matchLevel) }}
-          </span>
-          <span v-if="selected" class="inspector-importance">{{ importanceLabel(selected.importance) }}</span>
-          <span v-else>岗位分析</span>
+          <span>岗位要求</span>
         </div>
         <button
           type="button"
@@ -151,7 +142,6 @@ const activeBulletText = computed(() => {
           <p class="inspector-context-label">受约束改写</p>
           <h2>只修改这一条简历内容</h2>
           <p class="inspector-ai-source">{{ activeBulletText || '当前简历中的工作要点' }}</p>
-          <p v-if="props.locationLabel" class="inspector-target-location">对应位置：{{ props.locationLabel }}</p>
           <BulletSuggestionCard
             :mode="suggestionMode"
             :original-text="props.suggest.candidate.value?.originalText ?? activeBulletText"
@@ -171,68 +161,53 @@ const activeBulletText = computed(() => {
 
       <template v-else-if="result?.evidenceAnalysis && selected">
         <div class="inspector-detail">
-        <p class="inspector-context-label">岗位要求</p>
-        <h2>{{ selected.requirementText }}</h2>
+          <section class="inspector-block requirement-block">
+            <div class="requirement-status-line">
+              <span class="inspector-status" :class="statusClass(selected.matchLevel)">
+                {{ statusLabel(selected.matchLevel) }}
+              </span>
+              <span class="inspector-importance">{{ importanceLabel(selected.importance) }}</span>
+            </div>
+            <h2>{{ selected.requirementText }}</h2>
+          </section>
 
-        <section class="inspector-block jd-block">
-          <span class="block-label">要求原文</span>
-          <blockquote>“{{ selected.requirementText }}”</blockquote>
-          <p class="inspector-note">这条结论来自本次岗位分析时冻结的 JD。</p>
-        </section>
+          <section class="inspector-block evidence-block">
+            <div class="block-heading">
+              <h3>简历中的依据</h3>
+              <span v-if="selected.evidences.length" class="block-count">{{ selected.evidences.length }} 条</span>
+            </div>
+            <div v-if="selected.evidences.length" class="evidence-list">
+              <button
+                v-for="(evidence, index) in selected.evidences"
+                :key="evidence.requirementEvidenceId"
+                type="button"
+                class="evidence-item"
+                :class="{ 'is-primary': index === 0 }"
+                @click="emit('focusContext')"
+              >
+                <div class="evidence-source">
+                  <span class="evidence-type">{{ evidence.sectionLabel || '简历材料' }}</span>
+                  <span>{{ evidence.supportLevel === 'SUFFICIENT' ? '足够支持' : '部分支持' }}</span>
+                </div>
+                <p>“{{ evidence.evidenceText }}”</p>
+              </button>
+            </div>
+            <p v-else class="inspector-muted">当前材料中没有找到可引用的证据。</p>
+          </section>
 
-        <section class="inspector-block evidence-block">
-          <div class="block-heading">
-            <h3>来自简历</h3>
-            <span class="block-count">{{ selected.evidences.length }} 条关联</span>
-          </div>
-          <div v-if="selected.evidences.length" class="evidence-list">
-            <button
-              v-for="(evidence, index) in selected.evidences"
-              :key="evidence.requirementEvidenceId"
-              type="button"
-              class="evidence-item"
-              :class="{ 'is-primary': index === 0 }"
-              @click="emit('focusContext')"
-            >
-              <div class="evidence-source">
-                <span class="evidence-type">{{ evidenceLocation(evidence.sectionLabel) }}</span>
-                <span>{{ evidence.supportLevel === 'SUFFICIENT' ? '足够支持' : '部分支持' }}</span>
-              </div>
-              <p>“{{ evidence.evidenceText }}”</p>
-              <span class="evidence-location">来自已确认的简历材料 · 点击定位</span>
-            </button>
-          </div>
-          <p v-else class="inspector-muted">当前材料中没有找到可引用的证据。</p>
-        </section>
-
-        <section class="inspector-block gap-block">
-          <span class="block-label">{{ selected.matchLevel === 'MATCHED' ? '核对结论' : '需要补足' }}</span>
-          <div class="gap-content">
-            <span class="gap-marker" :class="statusClass(selected.matchLevel)" aria-hidden="true" />
-            <p>{{ selected.conclusion || '当前材料暂时无法支持这项要求。' }}</p>
-          </div>
-          <p v-if="selected.matchLevel === 'NO_EVIDENCE'" class="inspector-boundary">
-            当前材料未体现不代表你没有这项经历。只有在确有真实经历时，才手动补充到简历；系统不会自动加入。
-          </p>
-          <p v-else-if="selected.matchLevel === 'PARTIAL_EVIDENCE'" class="inspector-boundary">
-            已有相关经历，但当前简历中的表达还不够充分。可以强化已有材料的表达，不会自动加入新事实。
-          </p>
-        </section>
-
-        <section class="inspector-block suggestion-block">
-          <div class="block-heading suggestion-heading">
-            <h3>建议修改</h3>
-            <span class="block-count">保留真实材料</span>
-          </div>
-          <p class="suggestion-intro">{{ selected.suggestion || '当前材料已足够支持这项要求，无需为了匹配关键词额外增加事实。' }}</p>
-          <div class="suggestion-action-note">
-            <span class="action-mark" aria-hidden="true">↗</span>
-            <span>选择中央简历中的具体内容，在该行旁使用“优化”查看受约束改写。</span>
-          </div>
-          <button type="button" class="inspector-focus-button" @click="emit('focusContext')">
-            定位到对应简历内容
-          </button>
-        </section>
+          <section class="inspector-block next-step-block">
+            <h3>下一步 / 建议</h3>
+            <p v-if="selected.matchLevel === 'MATCHED'">
+              当前材料已经能够支持这项要求，无需为了匹配关键词额外修改。
+            </p>
+            <template v-else-if="selected.matchLevel === 'PARTIAL_EVIDENCE'">
+              <p>已有相关经历，但目前的表达还不足以完整支撑这项要求。</p>
+              <p><strong>建议：</strong>强化现有经历中与该要求直接相关的内容。</p>
+            </template>
+            <p v-else>
+              当前简历没有找到可引用的材料。如果你确实有相关经历，可以手动补充；系统不会自动添加未经确认的事实。
+            </p>
+          </section>
         </div>
       </template>
 
@@ -246,10 +221,6 @@ const activeBulletText = computed(() => {
       <p v-else class="inspector-quiet">暂无逐条证据分析，可以直接编辑简历内容。</p>
     </div>
 
-    <footer v-if="selected && !suggestionMode" class="inspector-footer">
-      <span class="footer-note">分析结论只对应当前冻结材料</span>
-      <button type="button" class="next-button" @click="emit('close')">收起检查器</button>
-    </footer>
   </aside>
 </template>
 
@@ -293,9 +264,9 @@ const activeBulletText = computed(() => {
   gap: 5px 7px;
   color: var(--app-text-secondary);
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 650;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
 
 .inspector-ref-dot {
@@ -305,10 +276,14 @@ const activeBulletText = computed(() => {
   background: var(--app-success);
 }
 
+.inspector-ref-ai .inspector-ref-dot {
+  background: var(--app-ai);
+}
+
 .inspector-status,
 .inspector-importance,
 .inspector-status-message {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -338,7 +313,7 @@ const activeBulletText = computed(() => {
   padding: 4px 0;
   color: var(--app-text-secondary);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   background: transparent;
 }
@@ -351,60 +326,55 @@ const activeBulletText = computed(() => {
 }
 
 .inspector-context-label {
-  margin: 15px 18px 5px;
-  color: var(--app-text-muted);
+  margin: 15px 18px 6px;
+  color: var(--app-ai);
   font-family: var(--app-font-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.inspector-detail > h2 {
-  margin: 0 18px 16px;
-  color: var(--app-text);
-  font-size: 20px;
-  font-weight: 750;
-  line-height: 1.22;
-  letter-spacing: -0.035em;
+  letter-spacing: 0.05em;
 }
 
 .inspector-block {
-  padding: 13px 18px 14px;
+  padding: 16px 18px;
   border-top: 1px solid var(--app-border-strong);
 }
 
-.block-label,
+.requirement-block {
+  padding-top: 14px;
+  border-top: 0;
+}
+
+.requirement-status-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+}
+
+.inspector-detail h2 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
 .block-count,
 .evidence-type {
   color: var(--app-text-muted);
-  font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 9px;
+  font-family: var(--app-font-mono);
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
-.jd-block blockquote {
-  margin: 8px 0 7px;
-  padding-left: 12px;
-  color: var(--app-text);
-  border-left: 1px solid var(--app-primary);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.inspector-note,
 .inspector-muted,
 .inspector-quiet,
-.inspector-boundary,
-.suggestion-intro,
-.suggestion-action-note,
-.inspector-target-location {
+.next-step-block p {
   margin: 0;
   color: var(--app-text-secondary);
-  font-size: 11px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 .block-heading {
@@ -473,95 +443,31 @@ const activeBulletText = computed(() => {
 
 .evidence-source > span:last-child {
   color: var(--app-text-secondary);
-  font-size: 10px;
-}
-
-.evidence-item p {
-  margin: 0 0 5px;
-  color: var(--app-text);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.evidence-location {
-  color: var(--app-text-muted);
-  font-size: 10px;
-}
-
-.gap-content {
-  display: grid;
-  grid-template-columns: 7px minmax(0, 1fr);
-  gap: 10px;
-  margin-top: 8px;
-}
-
-.gap-marker {
-  width: 7px;
-  height: 7px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: var(--app-primary);
-}
-
-.gap-marker.is-matched {
-  background: var(--app-success);
-}
-
-.inspector-boundary {
-  margin-top: 10px;
-  color: var(--app-text-muted);
-}
-
-.suggestion-block {
-  background: var(--app-ai-surface);
-}
-
-.suggestion-intro {
-  color: var(--app-text);
   font-size: 12px;
 }
 
-.suggestion-action-note {
-  display: flex;
-  gap: 7px;
-  margin-top: 12px;
-  color: var(--app-text-secondary);
+.evidence-item p {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
-.inspector-target-location {
-  margin: 8px 18px 14px;
-  padding: 8px 10px;
-  border-left: 2px solid var(--app-primary);
-  color: var(--app-text-secondary);
-  font-size: 11px;
-  line-height: 1.55;
-  background: var(--app-primary-soft);
+.next-step-block {
+  display: grid;
+  gap: 10px;
+  background: color-mix(in srgb, var(--app-surface) 70%, var(--app-bg-soft));
 }
 
-.inspector-focus-button {
-  margin-top: 13px;
-  border: 0;
-  padding: 0;
-  color: var(--app-primary-active);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  text-align: left;
-  background: transparent;
-  cursor: pointer;
+.next-step-block h3 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 750;
 }
 
-.inspector-focus-button:hover,
-.inspector-focus-button:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.action-mark {
-  flex: 0 0 auto;
-  color: var(--app-primary);
-  font-size: 14px;
-  line-height: 1.2;
+.next-step-block strong {
+  color: var(--app-text);
 }
 
 .inspector-status-message,
@@ -588,41 +494,6 @@ const activeBulletText = computed(() => {
   line-height: 1.6;
 }
 
-.inspector-footer {
-  display: flex;
-  min-height: 58px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: auto;
-  padding: 12px 18px 12px 23px;
-  background: var(--app-surface-soft);
-  border-top: 1px solid var(--app-border-strong);
-}
-
-.footer-note {
-  color: var(--app-text-muted);
-  font-size: 10px;
-}
-
-.next-button {
-  border: 0;
-  border-bottom: 1px solid var(--app-text);
-  padding: 4px 0;
-  color: var(--app-text);
-  font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  background: transparent;
-  cursor: pointer;
-}
-
-.next-button:hover,
-.next-button:focus-visible {
-  color: var(--app-primary-active);
-  border-color: var(--app-primary);
-}
-
 @media (max-width: 1250px) and (min-width: 1120px) {
   .inspector-header,
   .inspector-block {
@@ -630,8 +501,7 @@ const activeBulletText = computed(() => {
     padding-left: 18px;
   }
 
-  .inspector-context-label,
-  .inspector-detail > h2 {
+  .inspector-context-label {
     margin-right: 18px;
     margin-left: 18px;
   }
@@ -649,13 +519,10 @@ const activeBulletText = computed(() => {
     overflow-y: auto;
   }
 
-  .inspector-footer {
-    position: sticky;
-    bottom: 0;
-  }
 }
 .inspector-ai-detail {
   padding: 15px 18px 24px;
+  background: var(--app-ai-soft);
 }
 
 .inspector-ai-detail .inspector-context-label {
@@ -664,7 +531,7 @@ const activeBulletText = computed(() => {
 
 .inspector-ai-detail h2 {
   margin: 0;
-  color: var(--app-text);
+  color: var(--app-ai);
   font-size: 20px;
   line-height: 1.25;
 }
@@ -681,6 +548,7 @@ const activeBulletText = computed(() => {
 
 .inspector-ai-detail :deep(.bullet-suggestion) {
   margin-top: 0;
+  border: 1px solid var(--app-ai-border);
   border-radius: var(--app-radius-sm);
 }
 

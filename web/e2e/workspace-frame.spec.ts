@@ -212,6 +212,7 @@ test.describe('Workspace editor frame', () => {
       await expect(page.locator('.workspace-layout')).toBeVisible()
       await expect(page.getByText('岗位定向编辑', { exact: true })).toBeHidden()
       await expect(page.getByText('当前优化：具备 Redis 缓存设计经验', { exact: true })).toBeHidden()
+      await expect(page.locator('.workspace-context-strip')).toHaveCount(0)
       await expect(page.getByText('简历正文', { exact: true })).toBeVisible()
       await expect(page.getByText('✓ 已保存', { exact: true })).toBeVisible()
       await expect(page.locator('.workspace-inspector')).toBeHidden()
@@ -245,7 +246,7 @@ test.describe('Workspace editor frame', () => {
     })
   }
 
-  test('keeps requirements, document and context in independent scroll regions', async ({ page }) => {
+  test('keeps requirements and document scrollable while inspector stays concise', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 })
     await mockWorkspace(page, { denseRequirements: true })
     await page.goto('/workspace/42?requirement=3')
@@ -258,12 +259,16 @@ test.describe('Workspace editor frame', () => {
     await editor.hover()
     await page.mouse.wheel(0, 600)
     await expect.poll(() => editor.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
-    await page.getByRole('button', { name: /优化建议/ }).click()
+    await page.getByRole('button', { name: /分析详情/ }).click()
     const context = page.locator('.inspector-scroll')
     await expect(page.locator('.workspace-inspector')).toBeVisible()
-    await context.hover()
-    await page.mouse.wheel(0, 300)
-    await expect.poll(() => context.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+    await expect(page.getByRole('button', { name: '收起要求检查器' })).toHaveCount(1)
+    await expect(page.locator('.inspector-footer')).toHaveCount(0)
+    const inspectorMetrics = await context.evaluate((element) => ({
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight,
+    }))
+    expect(inspectorMetrics.scrollHeight).toBeGreaterThanOrEqual(inspectorMetrics.clientHeight)
     expect(await app.evaluate((element) => element.scrollTop)).toBe(0)
   })
 
@@ -409,11 +414,12 @@ test.describe('Workspace editor frame', () => {
     expect(appMetrics.scrollHeight).toBeLessThanOrEqual(appMetrics.clientHeight + 1)
     expect(appMetrics.scrollWidth).toBeLessThanOrEqual(appMetrics.clientWidth + 1)
     expect(appMetrics.scrollTop).toBe(0)
-    const suggestionsTab = page.getByRole('tab', { name: /优化建议/ })
+    const suggestionsTab = page.getByRole('tab', { name: /分析详情/ })
     await suggestionsTab.click()
     await expect(suggestionsTab).toHaveAttribute('aria-controls', 'workspace-panel-suggestions')
     await expect(page.locator('#workspace-panel-suggestions')).toHaveAttribute('aria-labelledby', 'workspace-tab-suggestions')
     await expect(page.locator('.workspace-inspector')).toBeVisible()
-    await expect(page.getByText('当前修改上下文 · 03', { exact: true })).toBeVisible()
+    await expect(page.locator('.workspace-inspector').getByText('岗位要求', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '分析详情' })).toHaveCount(0)
   })
 })

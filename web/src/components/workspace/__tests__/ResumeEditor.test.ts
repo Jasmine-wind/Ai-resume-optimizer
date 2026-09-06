@@ -63,6 +63,15 @@ const makeDocument = (): ResumeDocument => ({
 })
 
 describe('ResumeEditor', () => {
+  it('keeps the document focused by removing permanent editor microcopy and counts', () => {
+    const wrapper = mount(ResumeEditor, { props: { document: makeDocument() } })
+
+    expect(wrapper.find('.resume-page-meta').exists()).toBe(false)
+    expect(wrapper.find('.resume-page-footer').exists()).toBe(false)
+    expect(wrapper.find('.section-entry-count').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('添加职位、时间或地点')
+  })
+
   it('edits a bullet when the document prop is a reactive proxy', async () => {
     // 与 WorkspacePanel 一致：ref 深层响应式会把 document 变成 Proxy。
     // structuredClone 无法克隆 Proxy，编辑必须保持可用（Phase 8 浏览器回归缺陷）。
@@ -104,6 +113,18 @@ describe('ResumeEditor', () => {
 
     await wrapper.get('.identity-name').trigger('click')
     expect(wrapper.find('.identity-name-input').exists()).toBe(true)
+  })
+
+  it('keeps entry details and destructive actions behind one accessible menu', async () => {
+    const wrapper = mount(ResumeEditor, { props: { document: makeDocument() } })
+
+    await wrapper.get('.entry-more summary').trigger('click')
+    expect(wrapper.get('.entry-more-menu').text()).toContain('编辑详情')
+    expect(wrapper.get('.entry-more-menu').text()).toContain('删除此条目')
+
+    await wrapper.findAll('.entry-more-menu button')[0]!.trigger('click')
+    expect(wrapper.get('.entry-inline-editor').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('添加职位、时间或地点')
   })
 
   it('shows duplicate contact values and blank drafts only once', () => {

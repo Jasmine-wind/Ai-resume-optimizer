@@ -89,7 +89,6 @@ const editingName = ref(false)
 const editingContactId = ref<string | null>(null)
 const editingSectionTitle = ref<string | null>(null)
 const editingEntryKey = ref<string | null>(null)
-const expandedEntryFields = ref<Set<string>>(new Set())
 const expandedSectionIds = ref<Set<string>>(new Set())
 const editorRoot = ref<HTMLElement | null>(null)
 const sectionElements = new Map<string, HTMLElement>()
@@ -569,25 +568,6 @@ const bulletPlaceholder = (kind: string) => {
   }
 }
 
-const hasOptionalEntryFields = (entry: ResumeDocumentEntry, kind: string) =>
-  kind === 'EXPERIENCE' || kind === 'PROJECT' ? Boolean(entry.location?.trim()) : false
-
-const isEntryFieldsExpanded = (entryId: string) => expandedEntryFields.value.has(entryId)
-const toggleEntryFields = (entryId: string) => {
-  const next = new Set(expandedEntryFields.value)
-  if (next.has(entryId)) next.delete(entryId)
-  else next.add(entryId)
-  expandedEntryFields.value = next
-}
-
-const syncEntryFieldsOpen = (entryId: string, event: Event) => {
-  const open = (event.target as HTMLDetailsElement).open
-  const next = new Set(expandedEntryFields.value)
-  if (open) next.add(entryId)
-  else next.delete(entryId)
-  expandedEntryFields.value = next
-}
-
 const beginSectionTitleEdit = (sectionId: string) => {
   editingSectionTitle.value = sectionId
 }
@@ -646,7 +626,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 <template>
   <div ref="editorRoot" class="resume-editor">
     <div class="resume-paper">
-      <div class="resume-page-meta"><span>简历草稿</span><span>点击文字编辑</span></div>
     <section class="editor-block editor-basics">
       <header class="editor-block-header editor-basics-header">
         <div class="resume-identity">
@@ -817,7 +796,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
             {{ sectionTitle(section) }}
           </button>
         </div>
-        <span class="section-entry-count">{{ section.entries.length }} 段</span>
       </header>
 
       <div v-if="isSectionExpanded(section.id)" :id="`editor-section-${section.id}`" class="editor-section-content">
@@ -947,6 +925,16 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
                     updateEntry(section.id, entry.id, (target) => (target.endDate = value))
                 "
               />
+              <el-input
+                :model-value="entry.location ?? ''"
+                :maxlength="LIMITS.entryField"
+                placeholder="地点（可选）"
+                aria-label="地点"
+                @update:model-value="
+                  (value: string) =>
+                    updateEntry(section.id, entry.id, (target) => (target.location = value))
+                "
+              />
               <button type="button" class="inline-done" @click="finishEntryEdit">完成</button>
             </div>
           </template>
@@ -954,16 +942,26 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
             <button type="button" class="entry-title-display" @click="beginEntryEdit(section.id, entry.id)">
               {{ entryTitle(entry, section.kind) }}
             </button>
-            <button type="button" class="entry-meta-display" @click="beginEntryEdit(section.id, entry.id)">
-              {{ skillItemsText(entry) || '添加技能项' }}
+            <button
+              v-if="skillItemsText(entry)"
+              type="button"
+              class="entry-meta-display"
+              @click="beginEntryEdit(section.id, entry.id)"
+            >
+              {{ skillItemsText(entry) }}
             </button>
           </template>
           <template v-else>
             <button type="button" class="entry-title-display" @click="beginEntryEdit(section.id, entry.id)">
               {{ entryTitle(entry, section.kind) }}
             </button>
-            <button type="button" class="entry-meta-display" @click="beginEntryEdit(section.id, entry.id)">
-              {{ entryMeta(entry, section.kind) || '添加职位、时间或地点' }}
+            <button
+              v-if="entryMeta(entry, section.kind)"
+              type="button"
+              class="entry-meta-display"
+              @click="beginEntryEdit(section.id, entry.id)"
+            >
+              {{ entryMeta(entry, section.kind) }}
             </button>
           </template>
         </div>
@@ -1115,34 +1113,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
               </label>
             </div>
           </div>
-          <details
-            v-if="hasOptionalEntryFields(entry, section.kind) || isEntryFieldsExpanded(entry.id)"
-            class="entry-optional-fields"
-            :open="isEntryFieldsExpanded(entry.id)"
-            @toggle="syncEntryFieldsOpen(entry.id, $event)"
-          >
-            <summary>更多字段</summary>
-            <label class="editor-field">
-              <span>地点</span>
-              <el-input
-                :model-value="entry.location ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="例如 上海"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.location = value))
-                "
-              />
-            </label>
-          </details>
-          <button
-            v-if="!hasOptionalEntryFields(entry, section.kind) && !isEntryFieldsExpanded(entry.id)"
-            type="button"
-            class="add-field-control"
-            @click="toggleEntryFields(entry.id)"
-          >
-            添加更多字段
-          </button>
         </template>
 
         <div v-if="section.kind !== 'SKILL'" class="entry-bullets-label">
@@ -1236,6 +1206,12 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
             <div class="entry-more-menu">
               <button
                 type="button"
+                @click="beginEntryEdit(section.id, entry.id)"
+              >
+                编辑详情
+              </button>
+              <button
+                type="button"
                 class="danger-action"
                 :aria-label="`删除条目：${entryTitle(entry, section.kind)}`"
                 @click="deleteEntry(section.id, entry.id)"
@@ -1253,11 +1229,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
         }}</el-button>
       </div>
       </div>
-      <p v-else class="editor-collapsed-summary">
-        {{ section.entries.length }} 个条目 · 点击章节标题左侧展开编辑
-      </p>
     </section>
-    <div class="resume-page-footer"><span>当前版本由你确认</span><span>编辑内容会自动保存</span></div>
     </div>
     <p id="resume-reorder-help" class="sr-only">聚焦章节后使用 Alt 加上、下方向键调整顺序。</p>
     <div class="sr-only" aria-live="polite">{{ reorderAnnouncement }}</div>
@@ -1361,12 +1333,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   min-width: 0;
 }
 
-.editor-collapsed-summary {
-  margin: -5px 0 0 44px;
-  color: var(--app-text-muted);
-  font-size: 12px;
-}
-
 .editor-field {
   display: grid;
   min-width: 0;
@@ -1394,13 +1360,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   font-weight: 700;
 }
 
-.entry-optional-fields {
-  max-width: 760px;
-  border-top: 1px solid var(--app-border-soft);
-  padding-top: 12px;
-}
-
-.entry-optional-fields summary,
 .inline-more summary,
 .entry-more summary {
   width: fit-content;
@@ -1536,26 +1495,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   gap: 10px;
 }
 
-.entry-optional-fields {
-  display: grid;
-  gap: 10px;
-}
-
-.entry-optional-fields .editor-field {
-  max-width: 360px;
-}
-
-.add-field-control {
-  justify-self: start;
-  border: 0;
-  padding: 0;
-  color: var(--app-primary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  background: transparent;
-}
-
 .entry-bullets-label {
   margin-top: 2px;
 }
@@ -1650,34 +1589,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   box-shadow: var(--app-shadow-page);
 }
 
-.resume-page-meta,
-.resume-page-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  color: var(--app-text-muted);
-  font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.resume-page-meta {
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--app-text);
-}
-
-.resume-page-footer {
-  position: absolute;
-  right: 49px;
-  bottom: 20px;
-  left: 49px;
-  padding-top: 8px;
-  border-top: 1px solid var(--app-border);
-}
-
 .editor-block {
   gap: 14px;
   padding-bottom: 24px;
@@ -1714,7 +1625,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 .entry-bullets-label {
   color: var(--app-text-muted);
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1735,7 +1646,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 :deep(.el-input__inner) {
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 :deep(.el-textarea__inner) {
@@ -1744,8 +1655,8 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   border-radius: 0;
   padding: 6px 7px;
   color: var(--app-text);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.6;
   background: transparent;
   box-shadow: 0 1px 0 var(--app-border) !important;
   resize: vertical;
@@ -1782,7 +1693,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 .section-kind {
   color: var(--app-text-muted);
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -1828,7 +1739,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 }
 
 .bullet-suggest-button {
-  color: var(--app-primary-active);
+  color: var(--app-ai);
 }
 
 .entry-actions,
@@ -1836,7 +1747,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   padding-top: 3px;
 }
 
-.add-field-control,
 .section-footer :deep(.el-button),
 .entry-actions :deep(.el-button) {
   color: var(--app-text-secondary);
@@ -1866,18 +1776,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   padding: 26px 40px 32px;
   border-color: var(--app-border-strong);
   box-shadow: 0 5px 18px color-mix(in srgb, var(--app-text) 8%, transparent);
-}
-
-.resume-page-meta {
-  padding-bottom: 13px;
-  border-bottom-color: var(--app-border);
-  color: var(--app-text-muted);
-}
-
-.resume-page-footer {
-  position: static;
-  margin-top: 22px;
-  padding-top: 8px;
 }
 
 .editor-block {
@@ -2145,13 +2043,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   white-space: normal;
 }
 
-.section-entry-count {
-  color: var(--app-text-muted);
-  font-family: var(--app-font-mono);
-  font-size: 9px;
-  white-space: nowrap;
-}
-
 .entry-more summary,
 .inline-more summary {
   min-width: 20px;
@@ -2280,13 +2171,13 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 .entry-title-display {
   color: var(--app-text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 750;
 }
 
 .entry-meta-display {
   color: var(--app-text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -2337,14 +2228,11 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 .editor-entry > .skill-grid,
 .editor-entry > .entry-grid,
-.editor-entry > .entry-optional-fields,
-.editor-entry > .add-field-control,
 .editor-entry > .entry-bullets-label {
   display: none;
 }
 
-.editor-entry > .entry-actions,
-.editor-section > .section-footer {
+.editor-entry > .entry-actions {
   height: 0;
   min-height: 0;
   overflow: hidden;
@@ -2353,10 +2241,13 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   transition: opacity 140ms ease;
 }
 
+.editor-section > .section-footer {
+  min-height: 24px;
+  padding-top: 5px;
+}
+
 .editor-entry:hover > .entry-actions,
-.editor-entry:focus-within > .entry-actions,
-.editor-section:hover > .section-footer,
-.editor-section:focus-within > .section-footer {
+.editor-entry:focus-within > .entry-actions {
   height: auto;
   min-height: 24px;
   opacity: 1;
@@ -2370,9 +2261,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   margin: -4px 0 -4px -10px;
   padding: 5px 8px 5px 10px;
   border: 1px solid color-mix(in srgb, var(--app-focus) 38%, var(--app-border));
-  border-left: 3px solid var(--app-focus);
   border-radius: var(--app-radius-sm);
   background: color-mix(in srgb, var(--app-focus-soft) 58%, var(--app-surface));
+  box-shadow: inset 3px 0 0 var(--app-focus);
   animation: resume-focus-pulse 1.6s ease-out both;
 }
 
@@ -2408,8 +2299,8 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   overflow-wrap: anywhere;
   padding: 1px 0;
   color: var(--app-text);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.6;
   word-break: break-word;
   resize: none;
   box-shadow: none !important;
@@ -2434,9 +2325,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 
 .bullet-line:hover .bullet-suggest-button,
 .bullet-suggest-button:focus-visible {
-  border-color: var(--app-primary) !important;
-  color: var(--app-primary-active) !important;
-  background: var(--app-surface) !important;
+  border-color: var(--app-ai) !important;
+  color: var(--app-ai) !important;
+  background: var(--app-ai-soft) !important;
 }
 
 .entry-actions :deep(.el-button),
@@ -2445,8 +2336,14 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   border: 0;
   padding: 0;
   color: var(--app-text-muted);
-  font-size: 10px;
+  font-size: 12px;
   background: transparent;
+}
+
+.section-footer :deep(.el-button)::before {
+  margin-right: 5px;
+  content: '+';
+  font-size: 14px;
 }
 
 .entry-actions :deep(.el-button:hover),

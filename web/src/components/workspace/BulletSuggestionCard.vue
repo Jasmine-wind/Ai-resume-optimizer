@@ -151,10 +151,10 @@ const submitCustom = () => {
   display: grid;
   gap: 10px;
   margin-top: 2px;
-  border: 1px solid var(--app-primary-subtle);
+  border: 1px solid var(--app-ai-border);
   border-radius: var(--app-radius-md);
   padding: 13px;
-  background: var(--app-primary-soft);
+  background: var(--app-ai-soft);
 }
 
 .bullet-suggestion.is-rejected,
@@ -172,7 +172,7 @@ const submitCustom = () => {
 }
 
 .suggestion-title {
-  color: var(--app-text);
+  color: var(--app-ai);
   font-size: 13px;
   font-weight: 700;
 }
@@ -211,8 +211,8 @@ const submitCustom = () => {
 }
 
 .suggestion-copy-block.is-proposed {
-  border-color: var(--el-color-success-light-7);
-  background: var(--app-success-soft);
+  border-color: var(--app-ai-border);
+  background: var(--app-surface);
 }
 
 .suggestion-copy-block.is-diff {
@@ -243,7 +243,7 @@ const submitCustom = () => {
 }
 
 .suggestion-label {
-  color: var(--app-text-muted);
+  color: var(--app-ai);
   font-size: 11px;
   font-weight: 700;
 }

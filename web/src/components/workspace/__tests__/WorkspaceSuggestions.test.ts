@@ -75,5 +75,24 @@ describe('WorkspaceSuggestions', () => {
     expect(wrapper.text()).not.toContain('要求 3')
     expect(wrapper.find('.inspector-counts').exists()).toBe(false)
     expect(wrapper.find('.inspector-list').exists()).toBe(false)
+    expect(wrapper.findAll('.inspector-close')).toHaveLength(1)
+    expect(wrapper.find('.inspector-footer').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('要求原文')
+    expect(wrapper.text()).not.toContain('点击定位')
+    expect(wrapper.findAll('.inspector-detail h2')).toHaveLength(1)
+  })
+
+  it('focuses the resume immediately when an evidence row is activated', async () => {
+    const wrapper = mount(WorkspaceSuggestions, {
+      props: {
+        result,
+        loading: false,
+        error: null,
+        selectedRequirementId: 2,
+      },
+    })
+
+    await wrapper.get('.evidence-item').trigger('click')
+    expect(wrapper.emitted('focusContext')).toHaveLength(1)
   })
 })

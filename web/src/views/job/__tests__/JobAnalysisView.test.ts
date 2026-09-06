@@ -125,7 +125,7 @@ describe('JobAnalysisView', () => {
     const wrapper = await mountView(result([requirement(1, 'REQUIRED', 'MATCHED')]))
 
     expect(wrapper.find('.requirements-rail').text()).toContain('1 已支持')
-    expect(wrapper.find('.requirements-rail').text()).toContain('0 待完善')
+    expect(wrapper.find('.requirements-rail').text()).toContain('0 待处理')
     expect(wrapper.find('.requirement-item.is-selected').text()).toContain('要求 1')
     expect(wrapper.find('.analysis-selected-requirement-bar').text()).toContain('已有优势')
     expect(wrapper.findAll('.analysis-detail-block')).toHaveLength(0)

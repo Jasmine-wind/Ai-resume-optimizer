@@ -71,7 +71,12 @@ async function openWorkspaceWithoutEditing(page: Page) {
   await expect(page.getByText('✓ 已保存', { exact: true })).toBeVisible({ timeout: 15_000 })
 }
 
-async function previewAndExportAll(page: Page, testInfo: TestInfo, prefix: string) {
+async function previewAndExportAll(
+  page: Page,
+  testInfo: TestInfo,
+  prefix: string,
+  assertDesktopSticky = false,
+) {
   const previewButton = page.getByRole('button', { name: '预览 →', exact: true })
   if (await previewButton.isVisible()) await previewButton.click()
   await expect(
@@ -79,15 +84,26 @@ async function previewAndExportAll(page: Page, testInfo: TestInfo, prefix: strin
   ).toBeVisible({ timeout: 45_000 })
   await expect(page.getByTitle('简历 PDF 预览')).toBeVisible({ timeout: 45_000 })
   const previewInspector = page.getByRole('complementary', { name: '导出检查器' })
-  await expect(previewInspector.getByText('模板', { exact: true })).toBeVisible()
-  await expect(previewInspector.getByText('预览状态', { exact: true })).toBeVisible()
+  await expect(page.locator('.preview-document-toolbar strong')).toHaveText(/PDF 预览 · \d+ 页/)
+  await expect(page.locator('.preview-document-toolbar')).not.toContainText('最终文档')
+  await expect(
+    page.getByRole('link', { name: '在新窗口打开完整 PDF', exact: true }),
+  ).toBeVisible()
+  await expect(previewInspector.locator('.preview-template-section h2')).toHaveText('模板')
+  await expect(previewInspector.locator('.preview-template-section p')).toHaveText(
+    '切换模板后需重新预览。',
+  )
+  await expect(previewInspector.locator('.preview-status-section')).toContainText(/已生成 · \d+ 页/)
+  await expect(previewInspector.locator('.preview-state-row')).toHaveCount(0)
   await expect(previewInspector.getByText('导出前检查', { exact: true })).toBeVisible()
-  await expect(previewInspector.getByText('导出', { exact: true })).toBeVisible()
+  if (assertDesktopSticky) {
+    await expect(page.getByRole('button', { name: '导出 PDF', exact: true })).toBeInViewport()
+  }
 
   for (const template of ['classic', 'modern', 'minimal']) {
     if (template !== 'classic') {
       await page.getByTestId(`preview-template-${template}`).click()
-      await page.locator('.preview-inspector').getByRole('button', { name: /预览/ }).click()
+      await page.locator('.preview-status-section').getByRole('button', { name: /预览/ }).click()
       await expect(page.getByTitle('简历 PDF 预览')).toBeVisible({ timeout: 45_000 })
     }
     await expect(
@@ -103,6 +119,18 @@ async function previewAndExportAll(page: Page, testInfo: TestInfo, prefix: strin
   await exportHistory.locator('summary').click()
   await expect(exportHistory).toHaveJSProperty('open', true)
   await expect(exportHistory.locator('.artifact-list li')).toHaveCount(3)
+  if (assertDesktopSticky) {
+    const inspectorMetrics = await previewInspector.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }))
+    expect(inspectorMetrics.scrollHeight).toBeGreaterThan(inspectorMetrics.clientHeight)
+    await previewInspector.evaluate((element) => {
+      element.scrollTop = element.scrollHeight
+    })
+    await expect(page.getByRole('button', { name: '导出 PDF', exact: true })).toBeInViewport()
+    await expect(exportHistory.locator('.artifact-list li').last()).toBeInViewport()
+  }
 }
 
 test('happy path: upload, analysis, workspace, deterministic suggestion, preview and export', async ({
@@ -325,6 +353,19 @@ test('workspace conflict preserves the local draft; stale Preview and Suggest ca
   await first.close()
 })
 
+test.describe('desktop preview viewport', () => {
+  test.use({ viewport: { width: 1440, height: 900 } })
+
+  test('keeps the export action visible while the inspector scrolls', async ({ page }, testInfo) => {
+    await registerAndLogin(page)
+    await uploadAndStartAnalysis(page, englishPlatformJobDescription, mixedFixture)
+    await waitForAnalysis(page)
+    await openWorkspaceWithoutEditing(page)
+    await page.getByRole('button', { name: '预览 →', exact: true }).click()
+    await previewAndExportAll(page, testInfo, 'desktop-sticky', true)
+  })
+})
+
 test.describe('narrow viewport', () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
@@ -355,10 +396,15 @@ test.describe('narrow viewport', () => {
     ).toBeVisible({ timeout: 45_000 })
     const frame = page.getByTitle('简历 PDF 预览')
     await expect(frame).toBeVisible({ timeout: 45_000 })
-    const openPdf = page.getByRole('link', { name: '在新窗口打开 PDF' })
+    const openPdf = page.getByRole('link', { name: '在新窗口打开完整 PDF' })
     await expect(openPdf).toBeVisible()
     await expect(openPdf).toHaveAttribute('target', '_blank')
     await expect(openPdf).toHaveAttribute('href', /blob:/)
+    await expect(page.locator('.preview-template-section')).toBeInViewport()
+    const previewDocument = page.locator('.preview-document')
+    const previewDocumentBox = await previewDocument.boundingBox()
+    expect(previewDocumentBox?.height ?? 0).toBeGreaterThanOrEqual(180)
+    expect(previewDocumentBox?.height ?? 0).toBeLessThan(280)
     const narrowShell = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -366,6 +412,10 @@ test.describe('narrow viewport', () => {
     expect(narrowShell.scrollWidth).toBeLessThanOrEqual(narrowShell.clientWidth)
     const frameBox = await frame.boundingBox()
     expect(frameBox?.width ?? 0).toBeLessThanOrEqual(narrowShell.clientWidth)
+    await page.locator('.preview-template-section').scrollIntoViewIfNeeded()
+    await expect(page.locator('.preview-status-section')).toBeVisible()
+    await expect(page.locator('.preflight-section')).toBeVisible()
+    await expect(page.getByRole('button', { name: '导出 PDF', exact: true })).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('narrow-preview.png'), fullPage: true })
   })
 })

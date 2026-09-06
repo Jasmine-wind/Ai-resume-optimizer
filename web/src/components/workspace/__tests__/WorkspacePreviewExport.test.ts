@@ -163,8 +163,15 @@ describe('WorkspacePreviewExport', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('可以导出')
-    expect(wrapper.text()).toContain('2 页')
-    expect(wrapper.find('.preview-document-toolbar .preview-open-link').text()).toContain('在新窗口打开 PDF')
+    expect(wrapper.find('.preview-template-section h2').text()).toBe('模板')
+    expect(wrapper.find('.preview-template-section p').text()).toBe('切换模板后需重新预览。')
+    expect(wrapper.find('.preview-status-section').text()).toContain('已生成 · 2 页')
+    expect(wrapper.find('.preview-state-row').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('最终文档')
+    expect(wrapper.find('.preview-document-toolbar strong').text()).toBe('PDF 预览 · 2 页')
+    const openPdfLink = wrapper.find('.preview-document-toolbar .preview-open-link')
+    expect(openPdfLink.text()).toBe('打开完整 PDF')
+    expect(openPdfLink.attributes('aria-label')).toBe('在新窗口打开完整 PDF')
     expect(button(wrapper, '导出 PDF').attributes('disabled')).toBeUndefined()
     await button(wrapper, '导出 PDF').trigger('click')
     await flushPromises()
@@ -174,6 +181,37 @@ describe('WorkspacePreviewExport', () => {
       expectedRevision: 3,
       previewReceipt: 'signed-receipt',
     })
+  })
+
+  it('shows the compact generating state without a stale page count', async () => {
+    const pending = deferred<ReturnType<typeof previewResult>>()
+    previewMock.mockReturnValue(pending.promise)
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.find('.preview-status-section').text()).toContain('生成中')
+    expect(wrapper.find('.preview-status-section').text()).not.toContain('页')
+
+    pending.resolve(previewResult())
+    await flushPromises()
+  })
+
+  it('shows a compact failed state when preview generation fails', async () => {
+    previewMock.mockRejectedValue(new Error('PDF response invalid'))
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.find('.preview-status-section').text()).toContain('生成失败')
+  })
+
+  it('shows not generated after a template invalidates the current preview', async () => {
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'ElRadioGroup' }).vm.$emit('update:modelValue', 'modern')
+    await flushPromises()
+
+    expect(wrapper.find('.preview-status-section').text()).toContain('尚未生成')
   })
 
   it('reports a post-export download failure separately and offers the artifact download retry', async () => {

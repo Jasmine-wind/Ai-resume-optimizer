@@ -148,11 +148,18 @@ const preflightChecks = computed(() => {
 })
 
 const previewStateLabel = computed(() => {
-  if (!canOperate.value) return '等待保存'
-  if (previewLoading.value) return '正在生成'
+  if (previewLoading.value) return '生成中'
   if (operationFailure.value?.operation === 'preview') return '生成失败'
+  if (!canOperate.value) return '等待保存'
   if (previewUrl.value) return '已生成'
   return '尚未生成'
+})
+
+const previewStatusText = computed(() => {
+  if (previewStateLabel.value !== '已生成' || !previewPreflight.value) {
+    return previewStateLabel.value
+  }
+  return `${previewStateLabel.value} · ${previewPreflight.value.pageCount} 页`
 })
 
 const operateHint = computed(() => {
@@ -452,12 +459,18 @@ onBeforeUnmount(() => {
         :aria-busy="previewLoading"
       >
         <header class="preview-document-toolbar">
-          <div>
-            <span class="preview-section-label">最终文档</span>
-            <strong>PDF 预览</strong>
-          </div>
-          <a v-if="previewUrl" class="preview-open-link" :href="previewUrl" target="_blank" rel="noopener">
-            在新窗口打开 PDF
+          <strong>
+            PDF 预览<span v-if="previewPreflight && !previewLoading"> · {{ previewPreflight.pageCount }} 页</span>
+          </strong>
+          <a
+            v-if="previewUrl"
+            class="preview-open-link"
+            :href="previewUrl"
+            target="_blank"
+            rel="noopener"
+            aria-label="在新窗口打开完整 PDF"
+          >
+            打开完整 PDF
           </a>
         </header>
         <div class="preview-document-canvas">
@@ -473,15 +486,14 @@ onBeforeUnmount(() => {
           />
           <div v-else class="preview-placeholder">
             <strong>预览将在这里显示</strong>
-            <span>生成预览后，可以在导出前检查最终文档。</span>
+            <span>生成预览后，可以在导出前检查 PDF。</span>
           </div>
         </div>
       </section>
 
       <aside class="preview-inspector" aria-label="导出检查器">
         <section class="preview-inspector-section preview-template-section">
-          <span class="preview-section-label">模板</span>
-          <h2>选择简历模板</h2>
+          <h2>模板</h2>
           <el-radio-group v-model="templateId" size="small" aria-label="选择简历模板">
             <el-radio-button
               v-for="option in TEMPLATE_OPTIONS"
@@ -492,22 +504,18 @@ onBeforeUnmount(() => {
               {{ option.label }}
             </el-radio-button>
           </el-radio-group>
-          <p>修改模板后需要重新生成预览。</p>
+          <p>切换模板后需重新预览。</p>
         </section>
 
-        <section class="preview-inspector-section">
+        <section class="preview-inspector-section preview-status-section">
           <div class="preview-section-heading">
-            <span class="preview-section-label">预览状态</span>
-            <strong>{{ previewStateLabel }}</strong>
+            <span class="preview-section-label">预览</span>
+            <strong>{{ previewStatusText }}</strong>
           </div>
           <p v-if="!canOperate" class="operate-hint">{{ operateHint }}</p>
           <p v-else-if="!previewPreflight && !previewLoading" class="preview-first-hint">
             先生成一次预览，系统会检查最终文档后再允许导出。
           </p>
-          <div class="preview-state-row">
-            <span>当前文档</span>
-            <span>{{ previewPreflight ? `${previewPreflight.pageCount} 页` : '等待检查' }}</span>
-          </div>
           <el-button
             size="small"
             :loading="previewLoading"
@@ -523,9 +531,9 @@ onBeforeUnmount(() => {
             <span class="preview-section-label">导出前检查</span>
             <strong :class="preflightStatusClass">{{ preflightStatusLabel }}</strong>
           </div>
-          <div class="preflight-summary">
+          <div v-if="previewPreflight.pageLimitExceeded" class="preflight-summary">
             <strong>{{ previewPreflight.pageCount }} 页</strong>
-            <span v-if="previewPreflight.pageLimitExceeded" class="is-advisory">超过建议的 2 页</span>
+            <span class="is-advisory">建议控制在 2 页</span>
           </div>
           <ul class="preflight-check-list" role="list">
             <li v-for="check in preflightChecks" :key="check.label" :class="`is-${check.state}`">
@@ -553,27 +561,8 @@ onBeforeUnmount(() => {
           @action="retryFailedOperation"
         />
 
-        <section class="preview-inspector-section preview-export-action">
-          <div class="preview-section-heading">
-            <span class="preview-section-label">导出</span>
-            <strong v-if="exportSuccess" class="is-success">PDF 已生成</strong>
-          </div>
-          <p v-if="exportSuccess" class="export-success-copy">
-            {{ exportSuccess.fileName }} · {{ exportSuccess.pageCount }} 页 · {{ Math.ceil(exportSuccess.fileSize / 1024) }} KB
-          </p>
-          <p v-else-if="!canExport" class="export-blocked-copy">
-            {{ preflightStatusLabel === '尚未检查' ? '生成预览并完成导出前检查后可导出。' : '请先处理导出前检查中的阻断项。' }}
-          </p>
-          <el-button type="primary" :loading="exporting" :disabled="!canExport" @click="handleExport">
-            导出 PDF
-          </el-button>
-        </section>
-
         <details class="export-history" @toggle="handleHistoryToggle">
-          <summary>
-            <span class="preview-section-label">导出记录</span>
-            <span>最近导出</span>
-          </summary>
+          <summary>最近导出</summary>
           <div class="export-history-content">
             <p v-if="artifactsLoading && artifacts.length === 0" class="artifact-status">
               正在读取导出记录…
@@ -622,6 +611,21 @@ onBeforeUnmount(() => {
             </ul>
           </div>
         </details>
+
+        <section class="preview-inspector-section preview-export-action">
+          <div v-if="exportSuccess" class="preview-section-heading">
+            <strong class="is-success">PDF 已生成</strong>
+          </div>
+          <p v-if="exportSuccess" class="export-success-copy">
+            {{ exportSuccess.fileName }} · {{ exportSuccess.pageCount }} 页 · {{ Math.ceil(exportSuccess.fileSize / 1024) }} KB
+          </p>
+          <p v-else-if="!canExport" class="export-blocked-copy">
+            {{ preflightStatusLabel === '尚未检查' ? '生成预览并完成导出前检查后可导出。' : '请先处理导出前检查中的阻断项。' }}
+          </p>
+          <el-button type="primary" :loading="exporting" :disabled="!canExport" @click="handleExport">
+            导出 PDF
+          </el-button>
+        </section>
       </aside>
     </div>
   </div>
@@ -748,7 +752,7 @@ onBeforeUnmount(() => {
   display: grid;
   gap: var(--app-space-3);
   border-bottom: 1px solid var(--app-border);
-  padding: var(--app-space-5) var(--app-space-5);
+  padding: var(--app-space-4) var(--app-space-4);
 }
 
 .preview-section-label {
@@ -817,21 +821,6 @@ onBeforeUnmount(() => {
 
 .preview-section-heading strong.is-blocked {
   color: var(--app-danger);
-}
-
-.preview-state-row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--app-space-3);
-  border-top: 1px solid var(--app-border-soft);
-  padding-top: var(--app-space-3);
-  color: var(--app-text-secondary);
-  font-size: var(--app-font-size-xs);
-}
-
-.preview-state-row span:last-child {
-  color: var(--app-text);
-  font-weight: 700;
 }
 
 .preflight-summary {
@@ -923,6 +912,16 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--app-surface-soft) 70%, var(--app-bg-soft));
 }
 
+@media (min-width: 1120px) {
+  .preview-export-action {
+    position: sticky;
+    z-index: 2;
+    bottom: 0;
+    border-top: 1px solid var(--app-border-strong);
+    box-shadow: 0 -4px 12px rgba(37, 35, 31, 0.08);
+  }
+}
+
 .preview-export-action :deep(.el-button) {
   width: 100%;
   min-height: 40px;
@@ -946,20 +945,12 @@ onBeforeUnmount(() => {
 }
 
 .export-history summary {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--app-space-3);
-  padding: var(--app-space-4) var(--app-space-5);
+  display: block;
+  padding: var(--app-space-4);
   color: var(--app-text);
   font-size: var(--app-font-size-sm);
   font-weight: 700;
   cursor: pointer;
-}
-
-.export-history summary .preview-section-label {
-  color: var(--app-text-muted);
-  font-size: 10px;
 }
 
 .export-history-content {
@@ -1043,8 +1034,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 640px) {
   .preview-document {
-    height: min(64dvh, 560px);
-    min-height: 360px;
+    height: clamp(180px, 26dvh, 240px);
+    min-height: 180px;
   }
 
   .preview-inspector-section {
@@ -1055,6 +1046,11 @@ onBeforeUnmount(() => {
   .preview-template-section :deep(.el-radio-button__inner) {
     min-height: 40px;
     line-height: 40px;
+  }
+
+  .preview-export-action {
+    position: static;
+    box-shadow: none;
   }
 
   .artifact-actions {

@@ -11,6 +11,7 @@ spring:
     # provider bean. Generation is handled by the credential-aware gateway.
     model:
       chat: none
+      embedding: none
       audio:
         speech: none
         transcription: none

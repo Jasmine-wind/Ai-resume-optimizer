@@ -107,8 +107,15 @@ public class ResumeAiStructuredParserImpl implements ResumeAiStructuredParser {
             return skipped(true, "AI_BLOCK_LIMIT_EXCEEDED", ruleStructuredContent, qualityWarnings, startedAt);
         }
         if (selection == null && userId != null) {
-            selection = AiGatewaySupport.selectionForNewTask(
-                    aiGateway, userId, "RESUME_STRUCTURED_PARSE_SELECTION");
+            try {
+                selection = AiGatewaySupport.selectionForNewTask(
+                        aiGateway, userId, "RESUME_STRUCTURED_PARSE_SELECTION");
+            } catch (AiGatewayException exception) {
+                if (exception.getFailureCode() == AiFailureCode.AI_CONFIGURATION_REQUIRED) {
+                    return aiFallback("AI_CONFIGURATION_REQUIRED", ruleStructuredContent, qualityWarnings, startedAt);
+                }
+                throw exception;
+            }
         }
 
         List<String> warnings = new ArrayList<>(qualityWarnings == null ? List.of() : qualityWarnings);

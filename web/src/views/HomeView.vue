@@ -6,6 +6,11 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import ErrorState from '@/components/common/ErrorState.vue'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import { retryJobAnalysis, startJobAnalysis } from '@/api/job-analysis'
+import {
+  getAiProviderSettings,
+  resolveAiProviderConfigurationState,
+  type AiProviderConfigurationState,
+} from '@/api/ai-provider'
 import { getJobDirectionInsights } from '@/api/job-direction-insight'
 import { deleteOptimizationTask, getRecentOptimizationTasks } from '@/api/optimization-tasks'
 import type { OptimizationTask } from '@/types/optimization-task'
@@ -22,6 +27,7 @@ import {
   getStartBlockReason,
   pickInitialResumeId,
 } from './homeComposer'
+import { resolveSafeRedirect } from '@/utils/safeRedirect'
 
 const ACTIVE_ANALYSIS_STORAGE_KEY = 'cv-role:active-job-analysis'
 const ANALYSIS_TIMEOUT_MS = 8 * 60 * 1000
@@ -50,6 +56,8 @@ const startingAnalysis = ref(false)
 const preparationTaskIds = ref<Record<number, number>>({})
 const preparationMessages = ref<Record<number, string>>({})
 const hasJobDirectionInsight = ref(false)
+const aiConfigurationState = ref<AiProviderConfigurationState | null>(null)
+const aiConfigurationRequired = ref(false)
 const recentTasks = ref<OptimizationTask[]>([])
 const recentTasksFailed = ref(false)
 const recentTasksLoading = ref(false)
@@ -93,8 +101,16 @@ const startBlockReason = computed(() =>
     preparationTaskId: preparationTaskId.value,
     analysisRunning: analysisRunning.value,
     startingAnalysis: startingAnalysis.value,
+    aiConfigurationState: aiConfigurationState.value,
   }),
 )
+const requiresAiConfiguration = computed(() =>
+  aiConfigurationRequired.value || startBlockReason.value === 'AI 尚未配置' || startBlockReason.value === 'AI 配置尚未启用',
+)
+const aiSettingsTarget = computed(() => ({
+  name: 'ai-provider-settings' as const,
+  query: { redirect: resolveSafeRedirect('/app') },
+}))
 const canStart = computed(() => !startBlockReason.value)
 const currentStage = computed(() => analysisTask.value?.message || '正在保存你的简历和目标岗位')
 const analysisStateTitle = computed(() => {
@@ -138,6 +154,18 @@ const composerActionDetail = computed(() => {
   }
   return '完成这一步后，开始核对岗位要求。'
 })
+
+const loadAiConfiguration = async () => {
+  try {
+    const settings = await getAiProviderSettings()
+    aiConfigurationState.value = resolveAiProviderConfigurationState(settings)
+    aiConfigurationRequired.value = aiConfigurationState.value !== 'ACTIVE'
+  } catch {
+    // If the capability check is unavailable, let the start endpoint remain authoritative.
+    aiConfigurationState.value = null
+    aiConfigurationRequired.value = false
+  }
+}
 
 const loadInsightAvailability = async () => {
   try {
@@ -362,6 +390,9 @@ const handleStartAnalysis = async () => {
     saveActiveAnalysis(analysis)
     startAnalysisPolling(analysis)
   } catch (error) {
+    const failureCode = (error as { failureCode?: string }).failureCode
+    aiConfigurationRequired.value = failureCode === 'AI_CONFIGURATION_REQUIRED'
+    if (aiConfigurationRequired.value) aiConfigurationState.value = null
     analysisError.value = error instanceof Error ? error.message : '岗位分析启动失败'
   } finally {
     startingAnalysis.value = false
@@ -504,6 +535,7 @@ onMounted(async () => {
     }),
   )
   restoreActiveAnalysis()
+  void loadAiConfiguration()
   void loadInsightAvailability()
   void loadRecentTasks()
 })
@@ -696,11 +728,17 @@ onUnmounted(() => {
             class="home-action-label"
             >{{ composerActionLabel }}</span
           >
-          <strong>{{ composerActionText }}</strong>
+          <strong>{{ requiresAiConfiguration ? '开始优化前，请先配置并启用自己的 AI API。' : composerActionText }}</strong>
           <span v-if="composerActionDetail">{{ composerActionDetail }}</span>
         </div>
         <div class="home-start-actions-buttons">
+          <RouterLink v-if="requiresAiConfiguration" :to="aiSettingsTarget">
+            <el-button data-testid="home-configure-ai" type="primary" size="large">
+              配置 AI →
+            </el-button>
+          </RouterLink>
           <el-button
+            v-else
             data-testid="home-start-analysis"
             type="primary"
             size="large"

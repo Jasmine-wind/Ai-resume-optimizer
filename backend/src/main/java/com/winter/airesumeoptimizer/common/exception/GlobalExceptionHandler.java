@@ -117,7 +117,7 @@ public class GlobalExceptionHandler {
     public Result<Void> handleAiGatewayException(AiGatewayException exception, HttpServletRequest request) {
         AiFailureCode failureCode = exception.getFailureCode();
         int status = switch (failureCode) {
-            case INVALID_CREDENTIAL, CONFIGURATION_INVALID, UNSAFE_BASE_URL -> 400;
+            case INVALID_CREDENTIAL, AI_CONFIGURATION_REQUIRED, CONFIGURATION_INVALID, UNSAFE_BASE_URL -> 400;
             case CREDENTIAL_CHANGED -> 409;
             default -> 502;
         };

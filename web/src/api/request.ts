@@ -4,6 +4,11 @@ import type { ApiResult } from '@/types/auth'
 import { clearAuthToken, readAuthToken } from '@/utils/auth-token'
 import { aiFailureMessages, presentAiFailure } from '@/utils/aiFailurePresentation'
 
+export interface ApiError extends Error {
+  code?: number
+  failureCode?: string
+}
+
 interface ApiClient {
   get<T>(url: string, config?: AxiosRequestConfig): Promise<T>
   post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T>
@@ -42,11 +47,12 @@ const redirectUnauthorized = () => {
 }
 
 // 只翻译完整匹配的 AI 错误标识；普通业务文案保持原样，业务码仍使用后端整数。
+const isAiFailureCode = (message: string | undefined): message is keyof typeof aiFailureMessages =>
+  Boolean(message && Object.prototype.hasOwnProperty.call(aiFailureMessages, message))
+
 const translateErrorMessage = (message: string | undefined, fallback: string) => {
   if (!message) return fallback
-  return Object.prototype.hasOwnProperty.call(aiFailureMessages, message)
-    ? presentAiFailure(message, fallback)
-    : message
+  return isAiFailureCode(message) ? presentAiFailure(message, fallback) : message
 }
 
 const unwrapResponse = <T>(response: AxiosResponse<ApiResult<T>>) => {
@@ -62,8 +68,9 @@ const unwrapResponse = <T>(response: AxiosResponse<ApiResult<T>>) => {
           ? '服务器暂时无法处理请求，请稍后重试'
           : translateErrorMessage(result.message, '请求失败')
     // 附带业务码（如 409 revision 失效），调用方可据此做失效处理而不是只提示。
-    const apiError = new Error(message) as Error & { code?: number }
+    const apiError = new Error(message) as ApiError
     apiError.code = result.code
+    if (isAiFailureCode(result.message)) apiError.failureCode = result.message
     throw apiError
   }
 
@@ -104,8 +111,10 @@ service.interceptors.response.use(
     }
 
     // 附带业务码（如 409 revision 失效），调用方可据此做失效处理而不是只提示。
-    const apiError = new Error(message) as Error & { code?: number }
+    const apiError = new Error(message) as ApiError
     apiError.code = code ?? status
+    const failureMessage = normalizedError.response?.data?.message
+    if (isAiFailureCode(failureMessage)) apiError.failureCode = failureMessage
     return Promise.reject(apiError)
   },
 )
@@ -189,8 +198,9 @@ export const downloadPdfResponse = async (
     }
     const apiError = new Error(
       translateErrorMessage(parsed?.message, '下载失败，请稍后重试'),
-    ) as Error & { code?: number }
+    ) as ApiError
     apiError.code = parsed?.code
+    if (isAiFailureCode(parsed?.message)) apiError.failureCode = parsed.message
     throw apiError
   }
   if (!contentType.includes('application/pdf')) {

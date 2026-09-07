@@ -259,7 +259,10 @@ public class ContextAwareAiGatewayService
         if (userId == null || userId <= 0) {
             throw new AiGatewayException(AiFailureCode.CONFIGURATION_INVALID, "AI 调用上下文不可用");
         }
-        return credentialService.resolveCurrentSelection(userId).orElseGet(this::systemSelection);
+        return credentialService.resolveCurrentSelection(userId)
+                .orElseThrow(() -> new AiGatewayException(
+                        AiFailureCode.AI_CONFIGURATION_REQUIRED,
+                        "请先配置并启用自己的 AI"));
     }
 
     public AiSelectionSnapshot resolveSelection(AiInvocationContext context) {
@@ -268,58 +271,25 @@ public class ContextAwareAiGatewayService
             if (requested.source() == AiSource.USER_BYOK) {
                 return requested;
             }
-            // A task explicitly frozen to the system source must never be upgraded
-            // to whichever BYOK Credential happens to be active later. Complete
-            // Phase 7 snapshots retain the original system endpoint/model/config;
-            // legacy snapshots with blank fields resolve the current system config.
+            // Historical SYSTEM_DEFAULT snapshots remain readable, but are never
+            // upgraded to the user's current BYOK configuration or a server key.
             if (!requested.baseUrl().isBlank() && !requested.model().isBlank()) {
                 return requested;
             }
-            return systemSelection();
+            throw new AiGatewayException(
+                    AiFailureCode.CONFIGURATION_INVALID,
+                    "这个历史任务使用的是已停用的旧 AI 配置。请使用自己的 API 新建一个岗位优化任务。" );
         }
         return selectionForNewTask(context.userId());
     }
 
     private DecryptedCredentialMaterial resolveMaterial(Long userId, AiSelectionSnapshot selection) {
-        if (selection.isUserByok()) {
-            return credentialService.resolveMaterial(userId, selection);
+        if (!selection.isUserByok()) {
+            throw new AiGatewayException(
+                    AiFailureCode.CONFIGURATION_INVALID,
+                    "这个历史任务使用的是已停用的旧 AI 配置。请使用自己的 API 新建一个岗位优化任务。" );
         }
-        if (systemProperties.getApiKey() == null || systemProperties.getApiKey().isBlank()) {
-            throw new AiGatewayException(AiFailureCode.CONFIGURATION_INVALID, "系统 AI Provider 未配置");
-        }
-        return new DecryptedCredentialMaterial(
-                systemProperties.getApiKey().strip(),
-                selection.baseUrl(),
-                selection.model(),
-                selection.configJson(),
-                null,
-                null);
-    }
-
-    private AiSelectionSnapshot systemSelection() {
-        if (systemProperties.getBaseUrl() == null || systemProperties.getBaseUrl().isBlank()
-                || systemProperties.getModel() == null || systemProperties.getModel().isBlank()) {
-            throw new AiGatewayException(AiFailureCode.CONFIGURATION_INVALID, "系统 AI Provider 未配置");
-        }
-        try {
-            URI baseUrl = baseUrlPolicy.validateStructure(systemProperties.getBaseUrl());
-            String config = AiGenerationConfig.normalize(
-                    objectMapper,
-                    Map.of(),
-                    systemProperties.getTemperature(),
-                    systemProperties.getMaxTokens());
-            return new AiSelectionSnapshot(
-                    AiSource.SYSTEM_DEFAULT,
-                    AiSelectionSnapshot.OPENAI_COMPATIBLE,
-                    null,
-                    null,
-                    baseUrl.toString(),
-                    systemProperties.getModel().strip(),
-                    config,
-                    null);
-        } catch (OutboundTransportException exception) {
-            throw new AiGatewayException(AiFailureCode.UNSAFE_BASE_URL, "系统 AI Provider Base URL 不安全");
-        }
+        return credentialService.resolveMaterial(userId, selection);
     }
 
     private void validateContext(AiInvocationContext context, AiGatewayRequest request) {

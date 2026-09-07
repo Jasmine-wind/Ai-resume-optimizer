@@ -8,11 +8,13 @@ spring:
     default: local
   ai:
     openai:
-      api-key: ${AI_API_KEY:${DASHSCOPE_API_KEY:}}
-      base-url: ${AI_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
+      # Legacy adapter properties are test-only transport settings. Production
+      # generation uses the current user's encrypted BYOK selection instead.
+      api-key: ${REAL_AI_API_KEY:}
+      base-url: ${REAL_AI_BASE_URL:https://api.deepseek.com}
       chat:
         options:
-          model: ${AI_MODEL:${OPENAI_MODEL:deepseek-v4-flash}}
+          model: ${REAL_AI_MODEL:deepseek-v4-flash}
           temperature: ${AI_TEMPERATURE:${OPENAI_TEMPERATURE:0.2}}
   servlet:
     multipart:

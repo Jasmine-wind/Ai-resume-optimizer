@@ -5,6 +5,7 @@ import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import AuthShell from '@/components/auth/AuthShell.vue'
+import { resolveSafeRedirect } from '@/utils/safeRedirect'
 
 interface LoginForm {
   account: string
@@ -45,8 +46,7 @@ const handleSubmit = async () => {
   try {
     await authStore.login(form)
     ElMessage.success('登录成功')
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/app'
-    await router.push(redirect)
+    await router.push(resolveSafeRedirect(route.query.redirect))
   } catch (error) {
     submitError.value = error instanceof Error ? error.message : '登录暂时失败，请稍后重试。'
     ElMessage.error(submitError.value)

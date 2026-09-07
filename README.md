@@ -80,7 +80,7 @@ scripts/    运维脚本
 
 ```bash
 cp .env.example .env
-# 按需填写 AI_API_KEY / EMBEDDING_API_KEY，并检查本地密码
+# 本地无 AI 也可运行简历页面；需要测试生成式 AI 时，配置并启用你自己的 BYOK Credential。Embedding 仍按需配置。
 
 docker compose up -d postgres redis minio
 ```
@@ -154,9 +154,11 @@ cd web && npm run build
 
 ## 生产部署
 
+生产生成式 Chat AI 为 BYOK-only：服务器不提供平台 Chat API Key，用户必须在 AI 设置中测试、保存并启用自己的 OpenAI-compatible Credential。生产必须提供 Credential 加密 master key ring；缺失时后端 / Compose fail fast。Embedding 是独立的内部语义检索基础设施。
+
 ```bash
 cp .env.production.example .env
-# 替换全部生产密码、域名、JWT 和 API Key；生产 Compose 要求这些变量显式存在。
+# 替换全部生产密码、域名、JWT、Embedding Key 和 AI_CREDENTIALS_ACTIVE_KEY_ID / KEY_RING。
 
 docker compose -f docker-compose.prod.yml --env-file .env config
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build

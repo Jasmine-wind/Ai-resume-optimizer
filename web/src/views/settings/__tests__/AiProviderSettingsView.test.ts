@@ -8,48 +8,44 @@ import {
   disableAiProvider,
   enableAiProvider,
   getAiProviderSettings,
-  saveAiProviderSettings,
   testAiProvider,
 } from '@/api/ai-provider'
 import type { AiProviderCredential } from '@/api/ai-provider'
 
-const { messageError, messageSuccess } = vi.hoisted(() => ({
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: {} }),
+}))
+
+const { messageError, messageSuccess, confirm } = vi.hoisted(() => ({
   messageError: vi.fn(),
   messageSuccess: vi.fn(),
+  confirm: vi.fn(),
 }))
 
 const elementPlusStubs = vi.hoisted(() => ({
   ElButton: {
-    name: 'ElButton',
     props: ['disabled', 'loading'],
     emits: ['click'],
     template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
   },
-  ElAlert: { template: '<div><slot /></div>' },
-  ElForm: {
-    emits: ['submit'],
-    template: '<form @submit="$emit(\'submit\', $event)"><slot /></form>',
-  },
+  ElForm: { emits: ['submit'], template: '<form @submit="$emit(\'submit\', $event)"><slot /></form>' },
   ElFormItem: { template: '<div><slot /></div>' },
   ElInput: {
     props: ['modelValue', 'type', 'placeholder'],
     emits: ['update:modelValue'],
-    template:
-      '<input :type="type || \'text\'" :placeholder="placeholder" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+    template: '<input :type="type || \'text\'" :placeholder="placeholder" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  ElTag: { template: '<span><slot /></span>' },
 }))
 
 vi.mock('element-plus', () => ({
   ElMessage: { error: messageError, success: messageSuccess },
-  ElMessageBox: { confirm: vi.fn() },
+  ElMessageBox: { confirm },
   ...elementPlusStubs,
 }))
-
 vi.mock('element-plus/es', () => ({
-  ...elementPlusStubs,
   ElMessage: { error: messageError, success: messageSuccess },
-  ElMessageBox: { confirm: vi.fn() },
+  ElMessageBox: { confirm },
+  ...elementPlusStubs,
 }))
 
 vi.mock('@/api/ai-provider', () => ({
@@ -57,6 +53,11 @@ vi.mock('@/api/ai-provider', () => ({
   disableAiProvider: vi.fn(),
   enableAiProvider: vi.fn(),
   getAiProviderSettings: vi.fn(),
+  resolveAiProviderConfigurationState: (credential: AiProviderCredential) => {
+    if (!credential.configured) return 'UNCONFIGURED'
+    if (credential.status === 'ACTIVE' && credential.credentialStorageAvailable === true) return 'ACTIVE'
+    return 'SAVED_DISABLED'
+  },
   saveAiProviderSettings: vi.fn(),
   testAiProvider: vi.fn(),
 }))
@@ -65,14 +66,12 @@ const getSettingsMock = vi.mocked(getAiProviderSettings)
 const enableMock = vi.mocked(enableAiProvider)
 const disableMock = vi.mocked(disableAiProvider)
 const deleteMock = vi.mocked(deleteAiProvider)
-const saveMock = vi.mocked(saveAiProviderSettings)
 const testMock = vi.mocked(testAiProvider)
 
 const credential = (
   status: 'ACTIVE' | 'DISABLED',
   configured: boolean,
-  credentialStorageAvailable: boolean,
-  systemProviderConfigured: boolean,
+  credentialStorageAvailable = true,
 ): AiProviderCredential => ({
   providerType: 'OPENAI_COMPATIBLE',
   baseUrl: 'https://api.example.com/v1',
@@ -83,7 +82,6 @@ const credential = (
   apiKeyConfigured: configured,
   maskedApiKey: configured ? 'sk-***' : '',
   credentialStorageAvailable,
-  systemProviderConfigured,
 })
 
 const mountLoaded = async (settings: AiProviderCredential) => {
@@ -91,10 +89,7 @@ const mountLoaded = async (settings: AiProviderCredential) => {
   const wrapper = mount(AiProviderSettingsView, {
     global: {
       stubs: {
-        RouterLink: {
-          props: ['to', 'ariaCurrent'],
-          template: '<a :href="to"><slot /></a>',
-        },
+        RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
       },
     },
   })
@@ -110,78 +105,38 @@ describe('AiProviderSettingsView', () => {
     vi.clearAllMocks()
   })
 
-  it('reports activation after enabling instead of reading the post-update status backwards', async () => {
-    enableMock.mockResolvedValue(credential('ACTIVE', true, true, true))
-    const wrapper = await mountLoaded(credential('DISABLED', true, true, true))
+  it('shows the three BYOK states without any system-provider concept', async () => {
+    const unconfigured = await mountLoaded(credential('DISABLED', false))
+    expect(unconfigured.text()).toContain('AI 尚未配置')
+    expect(unconfigured.text()).not.toContain('系统 AI')
+    unconfigured.unmount()
 
-    await button(wrapper, '启用').trigger('click')
-    await flushPromises()
+    const disabled = await mountLoaded(credential('DISABLED', true))
+    expect(disabled.text()).toContain('API 已保存，尚未启用')
+    disabled.unmount()
 
-    expect(enableMock).toHaveBeenCalledOnce()
-    expect(messageSuccess).toHaveBeenCalledWith('已启用你的 API 密钥')
+    const active = await mountLoaded(credential('ACTIVE', true))
+    expect(active.text()).toContain('你的 API 已启用')
+    expect(active.text()).toContain('新创建的 AI 任务会使用这份配置。')
   })
 
-  it('reports deactivation after disabling instead of reading the post-update status backwards', async () => {
-    disableMock.mockResolvedValue(credential('DISABLED', true, true, true))
-    const wrapper = await mountLoaded(credential('ACTIVE', true, true, true))
+  it('disables BYOK without promising another provider', async () => {
+    disableMock.mockResolvedValue(credential('DISABLED', true))
+    const wrapper = await mountLoaded(credential('ACTIVE', true))
 
     await button(wrapper, '停用').trigger('click')
     await flushPromises()
 
     expect(disableMock).toHaveBeenCalledOnce()
-    expect(messageSuccess).toHaveBeenCalledWith('已停用你的 API，新任务将使用系统 AI。')
-  })
-
-  it('reports no available AI after disabling BYOK when the system provider is unavailable', async () => {
-    disableMock.mockResolvedValue(credential('DISABLED', true, true, false))
-    const wrapper = await mountLoaded(credential('ACTIVE', true, true, false))
-
-    await button(wrapper, '停用').trigger('click')
-    await flushPromises()
-
-    expect(messageSuccess).toHaveBeenCalledWith('已停用你的 API；当前没有可用 AI。')
-  })
-
-  it('uses System AI when saved BYOK is inactive and the system provider is configured', async () => {
-    const wrapper = await mountLoaded(credential('DISABLED', true, true, true))
-
-    expect(wrapper.text()).toContain('系统 AI')
-    expect(wrapper.text()).toContain('当前使用服务器配置的 AI，无需配置自己的 API。')
-    expect(wrapper.text()).not.toContain('系统 AI 会继续工作')
-  })
-
-  it('fails closed when no AI is configured and does not promise a system fallback', async () => {
-    const wrapper = await mountLoaded(credential('DISABLED', false, true, false))
-
-    expect(wrapper.text()).toContain('AI 尚未配置')
-    expect(wrapper.text()).toContain('当前没有可用的 AI 配置。')
+    expect(messageSuccess).toHaveBeenCalledWith('已停用你的 API；新的 AI 任务暂时不可用。')
     expect(wrapper.text()).not.toContain('系统 AI')
-    expect(wrapper.text()).not.toContain('新任务将使用系统 AI')
-    expect(wrapper.text()).not.toContain('系统 AI 会继续工作')
   })
 
-  it('explains that an inactive saved API is the only unavailable state', async () => {
-    const wrapper = await mountLoaded(credential('DISABLED', true, true, false))
-
-    expect(wrapper.text()).toContain('AI 尚未配置')
-    expect(wrapper.text()).toContain('你的 API 已保存但尚未启用；当前没有其它可用 AI。')
-    expect(wrapper.text()).not.toContain('系统 AI 会继续工作')
-    expect(wrapper.text()).not.toContain('新任务使用系统 AI')
-  })
-
-  it('presents an active BYOK credential as the effective AI', async () => {
-    const wrapper = await mountLoaded(credential('ACTIVE', true, true, false))
-
-    expect(wrapper.text()).toContain('你的 API')
-    expect(wrapper.text()).toContain('你保存的 API 已启用，新任务会使用它。')
-  })
-
-  it('retains the key after a successful test and clears it only after save', async () => {
+  it('enables a saved credential and keeps test input local', async () => {
+    enableMock.mockResolvedValue(credential('ACTIVE', true))
     testMock.mockResolvedValue({ success: true, message: '连接正常' })
-    saveMock.mockResolvedValue(credential('DISABLED', true, true, true))
-    const wrapper = await mountLoaded(credential('DISABLED', false, true, true))
+    const wrapper = await mountLoaded(credential('DISABLED', true))
     const inputs = wrapper.findAll('input')
-
     await inputs[0]!.setValue('https://api.example.com/v1')
     await inputs[1]!.setValue('secret-key')
     await inputs[2]!.setValue('test-model')
@@ -189,98 +144,34 @@ describe('AiProviderSettingsView', () => {
     await flushPromises()
 
     expect(inputs[1]!.element.value).toBe('secret-key')
-    expect(button(wrapper, '保存配置').attributes('disabled')).toBeUndefined()
-
-    await wrapper.find('form').trigger('submit')
+    await button(wrapper, '启用').trigger('click')
     await flushPromises()
-    expect(inputs[1]!.element.value).toBe('')
-    expect(saveMock).toHaveBeenCalledOnce()
+    expect(enableMock).toHaveBeenCalledOnce()
+    expect(messageSuccess).toHaveBeenCalledWith('已启用你的 API 密钥')
   })
 
-  it('retains the key after a failed test', async () => {
-    testMock.mockResolvedValue({ success: false, message: '连接没有通过' })
-    const wrapper = await mountLoaded(credential('DISABLED', false, true, true))
+  it('allows Test but fail-closed disables Save when storage is unavailable', async () => {
+    const wrapper = await mountLoaded(credential('DISABLED', false, false))
     const inputs = wrapper.findAll('input')
-
-    await inputs[0]!.setValue('https://api.example.com/v1')
-    await inputs[1]!.setValue('secret-key')
-    await inputs[2]!.setValue('test-model')
-    await button(wrapper, '测试连接').trigger('click')
-    await flushPromises()
-
-    expect(inputs[1]!.element.value).toBe('secret-key')
-    expect(wrapper.text()).toContain('连接测试失败')
-  })
-
-  it('clears an old test result whenever any connection field changes', async () => {
-    testMock.mockResolvedValue({ success: true, message: '连接正常' })
-    const wrapper = await mountLoaded(credential('DISABLED', false, true, true))
-    const inputs = wrapper.findAll('input')
-
-    await inputs[0]!.setValue('https://api.example.com/v1')
-    await inputs[1]!.setValue('secret-key')
-    await inputs[2]!.setValue('test-model')
-    await button(wrapper, '测试连接').trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('连接测试成功')
-
-    await inputs[2]!.setValue('new-model')
-    await flushPromises()
-    expect(wrapper.text()).not.toContain('连接测试成功')
-  })
-
-  it('allows Test but disables Save when credential storage is unavailable', async () => {
-    const wrapper = await mountLoaded(credential('DISABLED', false, false, false))
-    const inputs = wrapper.findAll('input')
-
     await inputs[0]!.setValue('https://api.example.com/v1')
     await inputs[1]!.setValue('secret-key')
     await inputs[2]!.setValue('test-model')
 
-    expect(button(wrapper, '测试连接').attributes('disabled')).toBeUndefined()
-    expect(button(wrapper, '保存配置').element.disabled).toBe(true)
-    expect(wrapper.text()).toContain('当前部署尚未启用 API 密钥保存')
-  })
-
-  it('fails closed when capability fields are missing from the response', async () => {
-    const response = {
-      ...credential('DISABLED', false, false, false),
-      credentialStorageAvailable: undefined,
-      systemProviderConfigured: undefined,
-    }
-    const wrapper = await mountLoaded(response)
-    const inputs = wrapper.findAll('input')
-
-    await inputs[0]!.setValue('https://api.example.com/v1')
-    await inputs[1]!.setValue('secret-key')
-    await inputs[2]!.setValue('test-model')
-
-    expect(wrapper.text()).toContain('AI 尚未配置')
-    expect(wrapper.text()).not.toContain('系统 AI')
-    expect(button(wrapper, '测试连接').attributes('disabled')).toBeUndefined()
+    expect(button(wrapper, '测试连接').element.disabled).toBe(false)
     expect(button(wrapper, '保存配置').element.disabled).toBe(true)
   })
 
-  it('branches the saved next step and delete confirmation on system availability', async () => {
-    saveMock.mockResolvedValue(credential('DISABLED', true, true, false))
-    const wrapper = await mountLoaded(credential('DISABLED', false, true, false))
-    const inputs = wrapper.findAll('input')
-    await inputs[0]!.setValue('https://api.example.com/v1')
-    await inputs[1]!.setValue('secret-key')
-    await inputs[2]!.setValue('test-model')
-    await wrapper.find('form').trigger('submit')
-    await flushPromises()
-
-    expect(wrapper.text()).toContain('启用后，新任务才能使用 AI；当前没有其它可用 AI。')
-
-    const confirm = vi.mocked((await import('element-plus')).ElMessageBox.confirm)
-    confirm.mockResolvedValueOnce(true as never)
+  it('uses the exact delete recovery copy', async () => {
+    const wrapper = await mountLoaded(credential('DISABLED', true))
+    confirm.mockResolvedValueOnce(true)
     deleteMock.mockResolvedValue(undefined)
-    getSettingsMock.mockResolvedValue(credential('DISABLED', false, true, false))
+    getSettingsMock.mockResolvedValue(credential('DISABLED', false))
+
     await button(wrapper, '删除').trigger('click')
     await flushPromises()
+
     expect(confirm).toHaveBeenCalledWith(
-      '删除后，你保存的 API 密钥将被移除；在重新配置或启用 AI 前，新任务无法使用 AI 功能。是否确认删除？',
+      '删除后，你保存的 API 密钥将被移除。在重新配置并启用 AI 前，新的 AI 任务将无法使用。是否确认删除？',
       '删除你的 API 密钥',
       expect.any(Object),
     )

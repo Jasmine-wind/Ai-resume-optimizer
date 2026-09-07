@@ -146,8 +146,17 @@ public class ResumeDisplayModelServiceImpl implements ResumeDisplayModelService 
         long startedAt = System.nanoTime();
         ResumeDisplayModelDTO ruleModel = buildRuleDisplayModel(resumeId, structuredContent);
         if (selection == null && userId != null) {
-            selection = AiGatewaySupport.selectionForNewTask(
-                    aiGateway, userId, "RESUME_DISPLAY_MODEL_SELECTION");
+            try {
+                selection = AiGatewaySupport.selectionForNewTask(
+                        aiGateway, userId, "RESUME_DISPLAY_MODEL_SELECTION");
+            } catch (AiGatewayException exception) {
+                if (exception.getFailureCode() == AiFailureCode.AI_CONFIGURATION_REQUIRED) {
+                    applyDisplayMeta(ruleModel, "RULE", false, true, "AI_CONFIGURATION_REQUIRED",
+                            elapsedMs(startedAt), false, "", null);
+                    return ruleModel;
+                }
+                throw exception;
+            }
         }
         try {
             Map<String, Object> promptInput = buildPromptInput(structuredContent);
@@ -206,8 +215,15 @@ public class ResumeDisplayModelServiceImpl implements ResumeDisplayModelService 
             AiSelectionSnapshot selection) {
         long startedAt = System.nanoTime();
         if (selection == null && userId != null) {
-            selection = AiGatewaySupport.selectionForNewTask(
-                    aiGateway, userId, "RESUME_DISPLAY_MODEL_CACHE_SELECTION");
+            try {
+                selection = AiGatewaySupport.selectionForNewTask(
+                        aiGateway, userId, "RESUME_DISPLAY_MODEL_CACHE_SELECTION");
+            } catch (AiGatewayException exception) {
+                if (exception.getFailureCode() == AiFailureCode.AI_CONFIGURATION_REQUIRED) {
+                    return null;
+                }
+                throw exception;
+            }
         }
         try {
             Map<String, Object> promptInput = buildPromptInput(structuredContent);

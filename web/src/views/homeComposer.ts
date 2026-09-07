@@ -1,4 +1,5 @@
 import type { ResumeListItem } from '@/types/resume'
+import type { AiProviderConfigurationState } from '@/api/ai-provider'
 
 export type ResumeStatusKind = 'ready' | 'preparing' | 'needs-review' | 'failed' | 'reparse' | 'pending' | 'empty'
 
@@ -14,6 +15,7 @@ export interface StartBlockReasonInput {
   preparationTaskId?: number | null
   analysisRunning?: boolean
   startingAnalysis?: boolean
+  aiConfigurationState?: AiProviderConfigurationState | null
 }
 
 export const MAX_RESUME_FILE_SIZE = 10 * 1024 * 1024
@@ -107,6 +109,10 @@ export const getStartBlockMessage = (reason: string) => {
       return '当前岗位分析正在进行。'
     case '当前任务正在启动':
       return '当前任务正在启动。'
+    case 'AI 尚未配置':
+      return '开始优化前，请先配置并启用自己的 AI API。'
+    case 'AI 配置尚未启用':
+      return '请先启用已保存的 API，才能开始岗位分析。'
     default:
       return reason
   }
@@ -118,6 +124,7 @@ export const getStartBlockReason = ({
   preparationTaskId,
   analysisRunning = false,
   startingAnalysis = false,
+  aiConfigurationState = null,
 }: StartBlockReasonInput) => {
   if (startingAnalysis) return '当前任务正在启动'
   if (analysisRunning) return '岗位分析正在进行'
@@ -129,6 +136,8 @@ export const getStartBlockReason = ({
   if (status.kind === 'failed') return '当前简历准备失败'
   if (status.kind === 'reparse') return '当前简历需要重新解析'
   if (!jobDescription.trim()) return '请粘贴目标岗位 JD'
+  if (aiConfigurationState === 'UNCONFIGURED') return 'AI 尚未配置'
+  if (aiConfigurationState === 'SAVED_DISABLED') return 'AI 配置尚未启用'
   return ''
 }
 

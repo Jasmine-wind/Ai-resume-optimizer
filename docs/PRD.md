@@ -893,6 +893,8 @@ Java 后端方向洞察
 
 # 23. AI Provider / BYOK
 
+**当前产品决策：生成式 Chat AI 为 BYOK-only。不存在系统默认 Chat Provider，也不存在用户未配置时的服务器密钥 fallback。** 每个用户必须配置、测试、保存并启用自己的 OpenAI-compatible Credential；新建岗位分析、岗位分析、Evidence、AI Suggest 与其它生成式能力均要求 ACTIVE Credential。Embedding-compatible 仍是独立的内部语义检索基础设施，不是 Chat 生成 fallback。
+
 支持每个用户配置：
 
 ```text
@@ -1534,4 +1536,12 @@ PDF
 >
 > **复杂能力留在实现层，简单决策留给用户。**
 >
-> **用户第一次只需要：上传简历、粘贴 JD、开始分析。**
+> **用户第一次只需要：上传简历、配置并启用自己的 API、粘贴 JD、开始分析。**
+
+## 当前 BYOK-only 运行约束（产品决策，不是新 Phase）
+
+- AI Settings 只有 `UNCONFIGURED`、`SAVED_DISABLED`、`ACTIVE` 三态。
+- 新任务只接受当前用户 ACTIVE 的 `USER_BYOK` selection；缺失时返回 `AI_CONFIGURATION_REQUIRED`。
+- 历史 `SYSTEM_DEFAULT` 仅用于读取既有结果与工作区；任何需要重新调用 AI 的动作都 fail closed，并提示用户新建岗位优化任务。
+- Resume 的可选 AI 增强在没有 BYOK 时使用已有规则型 fallback；不得把简历上传 / 管理、静态结果和 PDF 读取变成 AI Key 门槛。
+- 生产不注入 Chat Provider 密钥；生产固定启用 Credential 加密并在启动时校验 active key id 与 key ring。

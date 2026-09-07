@@ -102,7 +102,7 @@ scripts/  生产运维脚本
 - V23 加法式建立用户加密 Credential、OptimizationTask AI Selection Snapshot 与最小 attempt Usage ledger；System Default Secret 不进入数据库，Credential / Task / Usage 使用复合用户归属约束。Phase 9 没有新增业务表或 migration；Insight 与 Observability 均使用已有事实表。
 - pgvector 当前用于简历 / JD 分块语义检索；向量不可用时部分 AI 链路可以降级。
 - 简历原文件由 `FileStorageService` 抽象访问，本地开发默认 local，生产默认 MinIO。
-- Chat 只通过业务侧 `AiGateway` 调用 OpenAI-compatible Adapter；Embedding 保持 Platform-only。二者共享 pinned HTTPS transport，密钥不得进入前端、日志或 Git。AI settings GET 只返回 `credentialStorageAvailable` 与 `systemProviderConfigured` 等 capability，不返回任何 secret；BYOK storage 未启用时仍可 Test，但不能 Save。
+- Chat 只通过业务侧 `AiGateway` 调用 OpenAI-compatible Adapter；生成式 Chat 为 BYOK-only，Embedding 保持独立的 platform-only 语义检索基础设施。二者共享 pinned HTTPS transport，密钥不得进入前端、日志或 Git。AI settings GET 只返回 `credentialStorageAvailable` 与用户 Credential 状态等 capability，不返回任何 secret；BYOK storage 未启用时仍可 Test，但不能 Save。
 - `application.yaml` 提供公共默认值，`application-local/dev/test/prod.yaml` 负责环境差异；`application-demo.yaml` 与 `application-phase9-e2e.yaml` 明确限制为 fake Provider 的非生产环境。
 
 ## 5. 后续 V2 目标架构边界
@@ -135,7 +135,7 @@ Phase 2 已完成核心领域模型和主链路迁移。Phase 3 已把 Evidence 
 
 当前必须继续保持：JWT 鉴权、参数校验、资源归属检查、日志脱敏、上传限制、私有对象存储、环境变量注入。
 
-Provider / BYOK 已实现并必须继续保持：服务端 AES-256-GCM 加密、掩码显示、替换与删除、复合用户归属、任务级 Selection Snapshot、真实地址 pinning 的 SSRF 防护、Redirect / Proxy / Timeout / 解码后 Response Size 限制、稳定错误映射和 attempt Usage。BYOK 功能关闭时不得阻断 System Default；已冻结 BYOK Task 的 Secret 不可用时不得 fallback。Credential 保存只做 `BaseUrlPolicy.validateStructure`，Test 和实际 outbound 仍做完整 DNS 安全校验；这不是安全边界放宽。
+Provider / BYOK 已实现并必须继续保持：服务端 AES-256-GCM 加密、掩码显示、替换与删除、复合用户归属、任务级 Selection Snapshot、真实地址 pinning 的 SSRF 防护、Redirect / Proxy / Timeout / 解码后 Response Size 限制、稳定错误映射和 attempt Usage。生成式 Chat 没有 System Default fallback；新任务必须使用 ACTIVE `USER_BYOK`，缺失时返回 `AI_CONFIGURATION_REQUIRED`。历史 `SYSTEM_DEFAULT` 只允许读取已保存内容，需要重新调用 AI 时 fail closed。Credential 保存只做 `BaseUrlPolicy.validateStructure`，Test 和实际 outbound 仍做完整 DNS 安全校验；这不是安全边界放宽。
 
 Resume 与 JD 均视为不可信数据，不能覆盖平台指令、Schema 或真实性约束。
 
@@ -146,3 +146,7 @@ Resume 与 JD 均视为不可信数据，不能覆盖平台指令、Schema 或�
 - 部署配置：`docker compose config`（本地）和 `docker compose -f docker-compose.prod.yml --env-file <env> config`（生产模板）
 
 当前 CI 执行 PostgreSQL/Flyway + MinIO 后端测试、前端 unit/type/lint/build，以及由 deterministic fake Provider、PostgreSQL、MinIO、Typst 和 Chromium 组成的浏览器 E2E。V2 每个阶段必须在不破坏现有主链路的前提下增加针对新模型和新用户流的验证。
+
+## 当前 BYOK-only 决策
+
+生成式 Chat LLM 的正式运行路径不读取平台 Chat API Key、Base URL 或 Model 作为用户 fallback。新任务必须在创建任务前解析当前用户 ACTIVE Credential，并冻结不可变的 `USER_BYOK` selection；没有配置或仅保存未启用时直接返回 `AI_CONFIGURATION_REQUIRED`。`SYSTEM_DEFAULT` 数据库枚举仅为历史兼容，不能创建新任务，也不能 Retry / Regenerate / AI Suggest。Embedding-compatible 仍是独立的内部检索基础设施，不能替代 Chat generation。生产固定 `AI_CREDENTIALS_ENABLED=true`，active key id 与 key ring 缺失时启动失败；local/test 可关闭以支持无 AI 页面和 deterministic fake Provider。

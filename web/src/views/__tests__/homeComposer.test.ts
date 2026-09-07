@@ -97,8 +97,25 @@ describe('homeComposer', () => {
     })).toBe('当前简历需要确认')
   })
 
-  it('allows a ready resume and non-empty JD', () => {
-    expect(getStartBlockReason({ resume: resume(), jobDescription: '岗位要求' })).toBe('')
+  it('blocks a ready resume until BYOK is active', () => {
+    expect(getStartBlockReason({
+      resume: resume(),
+      jobDescription: '岗位要求',
+      aiConfigurationState: 'UNCONFIGURED',
+    })).toBe('AI 尚未配置')
+    expect(getStartBlockReason({
+      resume: resume(),
+      jobDescription: '岗位要求',
+      aiConfigurationState: 'SAVED_DISABLED',
+    })).toBe('AI 配置尚未启用')
+  })
+
+  it('allows a ready resume and non-empty JD with active BYOK', () => {
+    expect(getStartBlockReason({
+      resume: resume(),
+      jobDescription: '岗位要求',
+      aiConfigurationState: 'ACTIVE',
+    })).toBe('')
   })
 
   it('blocks duplicate submission while analysis is running', () => {

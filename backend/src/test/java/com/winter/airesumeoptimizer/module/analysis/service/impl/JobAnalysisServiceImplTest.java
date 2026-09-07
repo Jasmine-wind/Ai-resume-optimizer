@@ -11,6 +11,8 @@ import static org.mockito.Mockito.when;
 import com.winter.airesumeoptimizer.common.exception.BusinessException;
 import com.winter.airesumeoptimizer.infra.ai.AiClientService;
 import com.winter.airesumeoptimizer.infra.ai.AiFailureCode;
+import com.winter.airesumeoptimizer.infra.ai.AiGateway;
+import com.winter.airesumeoptimizer.infra.ai.AiGatewaySupport;
 import com.winter.airesumeoptimizer.infra.ai.AiGatewayException;
 import com.winter.airesumeoptimizer.infra.ai.AiSelectionSnapshot;
 import com.winter.airesumeoptimizer.infra.ai.AiSource;
@@ -75,6 +77,29 @@ class JobAnalysisServiceImplTest {
     }
 
     @Test
+    void startWithoutActiveByokFailsBeforeCreatingTaskOrAsyncTask() {
+        AiGateway contextGateway = mock(AiGatewaySupport.ContextAwareAiGateway.class);
+        when(contextGateway.selectionForNewTask(1L))
+                .thenThrow(new AiGatewayException(AiFailureCode.AI_CONFIGURATION_REQUIRED, "请先配置并启用自己的 AI"));
+        JobAnalysisServiceImpl guardedService = new JobAnalysisServiceImpl(
+                resumeService,
+                jobDescriptionParseService,
+                evidenceMatchService,
+                optimizationTaskService,
+                asyncTaskService,
+                asyncTaskFailureHandler,
+                contextGateway,
+                new SyncTaskExecutor());
+
+        assertThatThrownBy(() -> guardedService.start(1L, request("Java 后端工程师")))
+                .isInstanceOf(AiGatewayException.class)
+                .extracting(exception -> ((AiGatewayException) exception).getFailureCode())
+                .isEqualTo(AiFailureCode.AI_CONFIGURATION_REQUIRED);
+        verify(optimizationTaskService, never()).create(any(), any(), any(), any(), any(), any());
+        verify(asyncTaskService, never()).createTask(any(), any(), any(), any());
+    }
+
+    @Test
     void startShouldUseFormalTaskAndCaptureVersionSnapshotBeforeMatching() {
         prepareSuccessfulAnalysis();
 
@@ -100,6 +125,27 @@ class JobAnalysisServiceImplTest {
                 org.mockito.ArgumentMatchers.eq("test-model"));
         assertThat(titleCaptor.getValue()).isEqualTo("Java 后端工程师");
         assertThat(jdCaptor.getValue()).contains("Spring Boot");
+    }
+
+    @Test
+    void historicalSystemDefaultRetryFailsClosedBeforeAsyncTaskCreation() {
+        when(optimizationTaskService.getExecutionContext(1L, 50L))
+                .thenReturn(new ExecutionContext(
+                        50L, 10L, 20L, 30L, 40L, 41L,
+                        new AiSelectionSnapshot(
+                                AiSource.SYSTEM_DEFAULT,
+                                AiSelectionSnapshot.OPENAI_COMPATIBLE,
+                                null,
+                                null,
+                                "https://legacy.example.com/v1",
+                                "legacy-model",
+                                "{}",
+                                null)));
+
+        assertThatThrownBy(() -> service.retry(1L, 50L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("这个历史任务使用的是已停用的旧 AI 配置。请使用自己的 API 新建一个岗位优化任务。");
+        verify(asyncTaskService, never()).createTask(any(), any(), any(), any());
     }
 
     @Test

@@ -109,14 +109,15 @@ APP_STORAGE_TYPE=minio
 JWT_SECRET=your-long-random-jwt-secret
 JWT_EXPIRATION_MINUTES=120
 
-AI_BASE_URL=your-ai-base-url
-AI_API_KEY=your-ai-api-key
-AI_MODEL=your-ai-model
+# No platform Chat credential is configured. All users provide their own BYOK.
+AI_TEMPERATURE=0.2
+AI_TIMEOUT_SECONDS=90
+AI_MAX_TOKENS=16000
 
-# Optional account-level BYOK. Keep disabled when no valid key ring is injected.
-AI_CREDENTIALS_ENABLED=false
+# Required production BYOK encryption infrastructure.
+AI_CREDENTIALS_ENABLED=true
 AI_CREDENTIALS_ACTIVE_KEY_ID=v1
-AI_CREDENTIALS_KEY_RING=
+AI_CREDENTIALS_KEY_RING=v1=base64url-32-byte-key
 
 EMBEDDING_BASE_URL=https://api.siliconflow.cn/v1
 EMBEDDING_API_KEY=your-siliconflow-api-key
@@ -138,8 +139,9 @@ APP_CORS_ALLOWED_ORIGIN_PATTERNS=https://resume.dawn04.xyz
 - HTTPS 成功后，CORS 建议只保留 `https://resume.dawn04.xyz`。
 - 上传 contract 是应用文件 10 MB、multipart request 12 MB；Nginx 也限制为 12 MB，避免前端允许的 10 MB 文件被网关提前截断。
 - timeout chain 保持有界：AI 90 秒、Embedding 120 秒、Typst render 30 秒，Nginx `/api` read timeout 150 秒；分析主流程本身是异步任务，不靠延长网关 timeout 假造进度。
-- `AI_CREDENTIALS_ENABLED=false` 时数据库中即使存在 ACTIVE BYOK，新任务也使用 System Default；历史 BYOK Task 在需要再次调用 AI 时仍 fail closed。
-- 启用 BYOK 前，`AI_CREDENTIALS_KEY_RING` 必须使用 `keyId=base64url-32-byte-key;nextKeyId=...` 格式，且 `AI_CREDENTIALS_ACTIVE_KEY_ID` 必须存在于 key ring；配置错误会阻止后端启动。
+- 生成式 Chat 为 BYOK-only；没有 ACTIVE BYOK 时新任务返回 `AI_CONFIGURATION_REQUIRED`，不会使用服务器 Chat Key。
+- 生产固定 `AI_CREDENTIALS_ENABLED=true`。`AI_CREDENTIALS_KEY_RING` 必须使用 `keyId=base64url-32-byte-key;nextKeyId=...` 格式，且 `AI_CREDENTIALS_ACTIVE_KEY_ID` 必须存在于 key ring；Compose 和后端启动校验都会在缺失或非法时 fail fast。
+- local/test 可以设置 `AI_CREDENTIALS_ENABLED=false`，用于无 AI 页面或 deterministic fake Provider；这不会开启任何生产 fallback。
 - 轮换主密钥时先同时部署旧 / 新 key 并切换 active key；应用会在 Credential 使用时重加密且不改变 `credential_revision`。确认数据库不再引用旧 `encryption_key_version` 后才能移除旧 key。
 
 ---
@@ -399,7 +401,6 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d --build nginx
 如果修改的是后端运行时配置，例如：
 
 ```text
-AI_API_KEY
 AI_CREDENTIALS_ENABLED
 AI_CREDENTIALS_ACTIVE_KEY_ID
 AI_CREDENTIALS_KEY_RING
@@ -703,8 +704,7 @@ docker compose -f docker-compose.prod.yml --env-file .env logs --tail=300 backen
 Redis 密码错误
 MinIO 配置错误
 JWT_SECRET 缺失
-AI_API_KEY 缺失
-AI_CREDENTIALS_ENABLED=true 但 active key / key ring 缺失或格式错误
+AI_CREDENTIALS_ACTIVE_KEY_ID 或 AI_CREDENTIALS_KEY_RING 缺失 / 格式错误（生产启动 fail fast）
 Flyway 迁移失败
 ```
 

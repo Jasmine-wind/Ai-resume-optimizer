@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ErrorState from '@/components/common/ErrorState.vue'
 import SettingsLayout from '@/components/settings/SettingsLayout.vue'
 import { presentAiFailure } from '@/utils/aiFailurePresentation'
+import { resolveSafeRedirect } from '@/utils/safeRedirect'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import {
   deleteAiProvider,
@@ -13,8 +15,11 @@ import {
   saveAiProviderSettings,
   testAiProvider,
   type AiProviderCredential,
+  resolveAiProviderConfigurationState,
+  type AiProviderConfigurationState,
 } from '@/api/ai-provider'
 
+const route = useRoute()
 const loading = ref(true)
 const loadFailed = ref(false)
 const saving = ref(false)
@@ -32,55 +37,48 @@ const form = reactive({
   model: '',
 })
 
-type EffectiveAiState = 'USER_BYOK' | 'SYSTEM' | 'UNAVAILABLE'
-
 const configured = computed(() => Boolean(settings.value?.configured))
 const active = computed(() => settings.value?.status === 'ACTIVE')
-// Capability fields are part of the current backend contract. Missing fields fail closed so an
-// older or malformed response cannot claim that secrets are safely stored or System AI is ready.
+// Capability fields are part of the backend contract. Missing storage capability fails closed.
 const storageAvailable = computed(() => settings.value?.credentialStorageAvailable ?? false)
-const systemConfigured = computed(() => settings.value?.systemProviderConfigured ?? false)
-const effectiveAiState = computed<EffectiveAiState>(() => {
-  if (active.value && storageAvailable.value) return 'USER_BYOK'
-  if (systemConfigured.value) return 'SYSTEM'
-  return 'UNAVAILABLE'
-})
+const configurationState = computed<AiProviderConfigurationState>(() =>
+  settings.value
+    ? resolveAiProviderConfigurationState(settings.value)
+    : 'UNCONFIGURED',
+)
 const canTest = computed(() => Boolean(form.baseUrl.trim() && form.apiKey.trim() && form.model.trim()))
 const canSubmit = computed(() => Boolean(storageAvailable.value && canTest.value))
 const currentAiDescription = computed(() => {
-  switch (effectiveAiState.value) {
-    case 'USER_BYOK':
-      return '你保存的 API 已启用，新任务会使用它。'
-    case 'SYSTEM':
-      return '当前使用服务器配置的 AI，无需配置自己的 API。'
-    case 'UNAVAILABLE':
-      return configured.value && storageAvailable.value
-        ? '你的 API 已保存但尚未启用；当前没有其它可用 AI。'
-        : '当前没有可用的 AI 配置。'
+  switch (configurationState.value) {
+    case 'ACTIVE':
+      return '你的 API 已启用，新创建的 AI 任务会使用这份配置。'
+    case 'SAVED_DISABLED':
+      return '你的 API 已安全保存，但尚未启用。启用后，新任务才会使用 AI。'
+    case 'UNCONFIGURED':
+      return '配置并启用自己的 API 后，即可使用岗位分析和 AI 优化。'
     default:
-      return '当前没有可用的 AI 配置。'
+      return '配置并启用自己的 API 后，即可使用岗位分析和 AI 优化。'
   }
 })
 const statusLabel = computed(() => {
-  if (effectiveAiState.value === 'USER_BYOK') return '你的 API'
-  if (effectiveAiState.value === 'SYSTEM') return '系统 AI'
-  return 'AI 尚未配置'
+  switch (configurationState.value) {
+    case 'ACTIVE':
+      return '你的 API 已启用'
+    case 'SAVED_DISABLED':
+      return 'API 已保存，尚未启用'
+    case 'UNCONFIGURED':
+      return 'AI 尚未配置'
+    default:
+      return 'AI 尚未配置'
+  }
 })
-const nextStepDescription = computed(() => systemConfigured.value
-  ? '启用后，新任务会使用你的 API；不启用时仍使用系统 AI。'
-  : '启用后，新任务才能使用 AI；当前没有其它可用 AI。')
-const disableSuccessMessage = computed(() => systemConfigured.value
-  ? '已停用你的 API，新任务将使用系统 AI。'
-  : '已停用你的 API；当前没有可用 AI。')
-const deleteConfirmationMessage = computed(() => systemConfigured.value
-  ? '删除后，你保存的 API 密钥将被移除；新任务会使用系统 AI。是否确认删除？'
-  : '删除后，你保存的 API 密钥将被移除；在重新配置或启用 AI 前，新任务无法使用 AI 功能。是否确认删除？')
-const securityDescription = computed(() => systemConfigured.value
-  ? '停用后，新任务会使用系统 AI。'
-  : '停用后，当前将没有可用 AI。')
-const deleteDangerDescription = computed(() => systemConfigured.value
-  ? '删除后新任务会使用系统 AI；'
-  : '删除后当前将没有可用 AI；')
+const nextStepDescription = '启用后，新任务才能使用你的 API。'
+const disableSuccessMessage = '已停用你的 API；新的 AI 任务暂时不可用。'
+const deleteConfirmationMessage = '删除后，你保存的 API 密钥将被移除。在重新配置并启用 AI 前，新的 AI 任务将无法使用。是否确认删除？'
+const securityDescription = '停用或删除 API 后，新任务无法使用 AI。'
+const deleteDangerDescription = '删除后新任务无法使用 AI；'
+const redirectPath = computed(() => resolveSafeRedirect(route.query.redirect))
+const hasRedirect = computed(() => typeof route.query.redirect === 'string')
 
 const copySettingsToForm = (value: AiProviderCredential) => {
   form.baseUrl = value.baseUrl || ''
@@ -165,7 +163,7 @@ const handleToggle = async () => {
     settings.value = wasActive ? await disableAiProvider() : await enableAiProvider()
     savedNeedsEnable.value = false
     copySettingsToForm(settings.value)
-    ElMessage.success(wasActive ? disableSuccessMessage.value : '已启用你的 API 密钥')
+    ElMessage.success(wasActive ? disableSuccessMessage : '已启用你的 API 密钥')
   } catch (error) {
     actionError.value = error instanceof Error ? error.message : '更新状态失败'
     ElMessage.error(actionError.value)
@@ -178,7 +176,7 @@ const handleDelete = async () => {
   if (!configured.value || actionLoading.value) return
   try {
     await ElMessageBox.confirm(
-      deleteConfirmationMessage.value,
+      deleteConfirmationMessage,
       '删除你的 API 密钥',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
     )
@@ -232,16 +230,17 @@ onMounted(load)
       <section class="settings-content-heading">
         <p class="settings-section-label">高级能力</p>
         <h2>AI 设置</h2>
-        <p>普通岗位分析无需配置。只有使用自己的 API 密钥时，才需要填写这里。</p>
+        <p>开始岗位分析前，请先配置并启用你自己的 API 密钥。</p>
+        <RouterLink v-if="hasRedirect" class="settings-return-link" :to="redirectPath">返回开始优化</RouterLink>
       </section>
 
       <section class="settings-current-ai" aria-labelledby="current-ai-title">
         <div>
           <p class="settings-section-label">当前状态</p>
-          <h2 id="current-ai-title">当前使用的 AI</h2>
+          <h2 id="current-ai-title">当前状态</h2>
           <p>{{ currentAiDescription }}</p>
         </div>
-        <div class="settings-current-ai-status" :class="{ 'is-active': effectiveAiState === 'USER_BYOK', 'is-system': effectiveAiState === 'SYSTEM', 'is-unavailable': effectiveAiState === 'UNAVAILABLE' }">
+        <div class="settings-current-ai-status" :class="{ 'is-active': configurationState === 'ACTIVE', 'is-saved-disabled': configurationState === 'SAVED_DISABLED', 'is-unconfigured': configurationState === 'UNCONFIGURED' }">
           <span class="settings-status-dot" aria-hidden="true" />
           <strong>{{ statusLabel }}</strong>
         </div>
@@ -314,11 +313,11 @@ onMounted(load)
       <section v-if="configured && storageAvailable" class="settings-status-actions" aria-labelledby="status-actions-title">
         <div>
           <p class="settings-section-label">配置状态</p>
-          <h2 id="status-actions-title">{{ effectiveAiState === 'USER_BYOK' ? '自己的 API 已启用' : '自己的 API 尚未启用' }}</h2>
-          <p>{{ effectiveAiState === 'USER_BYOK' ? '新岗位分析会使用已保存的连接。' : '启用后，新岗位分析才会使用已保存的连接。' }}</p>
+          <h2 id="status-actions-title">{{ configurationState === 'ACTIVE' ? '你的 API 已启用' : '你的 API 已保存，尚未启用' }}</h2>
+          <p>{{ configurationState === 'ACTIVE' ? '新岗位分析会使用已保存的连接。' : '启用后，新岗位分析才能使用已保存的连接。' }}</p>
         </div>
-        <el-button :type="effectiveAiState === 'USER_BYOK' ? 'default' : 'primary'" :loading="actionLoading" @click="handleToggle">
-          {{ effectiveAiState === 'USER_BYOK' ? '停用' : '启用' }}
+        <el-button :type="configurationState === 'ACTIVE' ? 'default' : 'primary'" :loading="actionLoading" @click="handleToggle">
+          {{ configurationState === 'ACTIVE' ? '停用' : '启用' }}
         </el-button>
       </section>
 
@@ -432,12 +431,12 @@ onMounted(load)
   background: var(--app-accent);
 }
 
-.settings-current-ai-status.is-active .settings-status-dot,
-.settings-current-ai-status.is-system .settings-status-dot {
+.settings-current-ai-status.is-active .settings-status-dot {
   background: var(--app-success);
 }
 
-.settings-current-ai-status.is-unavailable .settings-status-dot {
+.settings-current-ai-status.is-saved-disabled .settings-status-dot,
+.settings-current-ai-status.is-unconfigured .settings-status-dot {
   background: var(--app-warning);
 }
 

@@ -11,6 +11,7 @@ const messages: Record<string, string> = {
   RESPONSE_TOO_LARGE: 'AI 返回内容过长，请重新生成。',
   CREDENTIAL_CHANGED: 'AI 配置已经变化，请刷新后重试。',
   CONFIGURATION_INVALID: 'AI 配置不完整，请检查 AI 设置。',
+  AI_CONFIGURATION_REQUIRED: '请先在 AI 设置中配置并启用自己的 API。',
   INTERRUPTED: 'AI 请求已中断，请重新尝试。',
 }
 

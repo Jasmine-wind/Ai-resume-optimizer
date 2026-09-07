@@ -36,13 +36,12 @@ app:
       bucket: ${MINIO_BUCKET:ai-resume-files}
       public-endpoint: ${MINIO_PUBLIC_ENDPOINT:}
   ai:
-    openai-compatible:
-      api-key: ${AI_API_KEY}
-      base-url: ${AI_BASE_URL}
-      model: ${AI_MODEL}
-      timeout-seconds: ${AI_TIMEOUT_SECONDS:90}
-      temperature: ${AI_TEMPERATURE:0.2}
-      max-tokens: ${AI_MAX_TOKENS:16000}
+    # Chat credentials are never supplied by the platform in production.
+    # Runtime generation is selected only from the current user's encrypted BYOK.
+    credentials:
+      enabled: true
+      active-key-id: ${AI_CREDENTIALS_ACTIVE_KEY_ID:?AI_CREDENTIALS_ACTIVE_KEY_ID is required}
+      key-ring: ${AI_CREDENTIALS_KEY_RING:?AI_CREDENTIALS_KEY_RING is required}
     embedding-compatible:
       api-key: ${EMBEDDING_API_KEY:}
       base-url: ${EMBEDDING_BASE_URL:https://api.siliconflow.cn/v1}

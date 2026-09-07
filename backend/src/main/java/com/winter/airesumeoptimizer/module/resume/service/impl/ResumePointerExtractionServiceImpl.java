@@ -60,8 +60,15 @@ public class ResumePointerExtractionServiceImpl implements ResumePointerExtracti
             return empty(extractorType, false, false);
         }
         if (selection == null && userId != null) {
-            selection = AiGatewaySupport.selectionForNewTask(
-                    aiGateway, userId, "RESUME_POINTER_EXTRACTION_SELECTION");
+            try {
+                selection = AiGatewaySupport.selectionForNewTask(
+                        aiGateway, userId, "RESUME_POINTER_EXTRACTION_SELECTION");
+            } catch (AiGatewayException exception) {
+                if (exception.getFailureCode() == AiFailureCode.AI_CONFIGURATION_REQUIRED) {
+                    return empty(extractorType, false, false);
+                }
+                throw exception;
+            }
         }
         String cacheKey = cacheKey(userId, resumeId, indexedLines, parseMode, extractorType, selection);
         ResumePointerExtractionResultDTO cached = cache.get(cacheKey);

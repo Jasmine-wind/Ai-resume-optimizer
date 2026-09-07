@@ -149,6 +149,12 @@ public class JobAnalysisServiceImpl implements JobAnalysisService {
             throw new BusinessException(409, "岗位分析正在进行中");
         }
         ExecutionContext context = optimizationTaskService.getExecutionContext(userId, optimizationTaskId);
+        if (context.aiSelection() != null
+                && context.aiSelection().source() == com.winter.airesumeoptimizer.infra.ai.AiSource.SYSTEM_DEFAULT) {
+            throw new BusinessException(
+                    409,
+                    "这个历史任务使用的是已停用的旧 AI 配置。请使用自己的 API 新建一个岗位优化任务。");
+        }
         Long asyncTaskId = asyncTaskService.createTask(
                 userId,
                 AsyncTaskType.MATCH_ANALYSIS,

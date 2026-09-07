@@ -332,7 +332,6 @@ public class AiCredentialServiceImpl implements AiCredentialService {
                 .apiKeyConfigured(true)
                 .maskedApiKey("••••••••")
                 .credentialStorageAvailable(credentialCipher.isEnabled())
-                .systemProviderConfigured(systemProviderConfigured())
                 .credentialRevision(credential.getCredentialRevision())
                 .createdAt(credential.getCreatedAt())
                 .updatedAt(credential.getUpdatedAt())
@@ -348,15 +347,7 @@ public class AiCredentialServiceImpl implements AiCredentialService {
                 .maskedApiKey("")
                 .config(Map.of())
                 .credentialStorageAvailable(credentialCipher.isEnabled())
-                .systemProviderConfigured(systemProviderConfigured())
                 .build();
-    }
-
-    private boolean systemProviderConfigured() {
-        return systemProperties != null
-                && systemProperties.getApiKey() != null && !systemProperties.getApiKey().isBlank()
-                && systemProperties.getBaseUrl() != null && !systemProperties.getBaseUrl().isBlank()
-                && systemProperties.getModel() != null && !systemProperties.getModel().isBlank();
     }
 
     private Map<String, Object> readConfig(String configJson) {

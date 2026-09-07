@@ -18,7 +18,7 @@ const credential = (
   status: 'ACTIVE' | 'DISABLED',
   configured: boolean,
   credentialStorageAvailable: boolean,
-  systemProviderConfigured: boolean,
+  _ignored?: boolean,
 ) => ({
   providerType: 'OPENAI_COMPATIBLE',
   baseUrl: 'https://api.example.com/v1',
@@ -29,7 +29,6 @@ const credential = (
   apiKeyConfigured: configured,
   maskedApiKey: configured ? 'sk-••••••' : '',
   credentialStorageAvailable,
-  systemProviderConfigured,
 })
 
 const installUser = async (page: Page) => {
@@ -186,28 +185,27 @@ test.describe('AI settings', () => {
     await installUser(page)
   })
 
-  test('keeps the system AI as the default when no personal API is configured', async ({ page }) => {
+  test('shows the unconfigured BYOK state without any system fallback', async ({ page }) => {
     await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false, true, true))))
     await page.goto('/settings/ai-provider')
-    await expect(page.getByRole('heading', { name: '当前使用的 AI' })).toBeVisible()
-    await expect(page.getByText('系统 AI', { exact: true })).toBeVisible()
-    await expect(page.getByText('当前使用服务器配置的 AI，无需配置自己的 API。')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '当前状态' })).toBeVisible()
+    await expect(page.getByText('AI 尚未配置', { exact: true })).toBeVisible()
+    await expect(page.getByText('配置并启用自己的 API 后，即可使用岗位分析和 AI 优化。')).toBeVisible()
+    await expect(page.getByText('系统 AI', { exact: true })).toHaveCount(0)
   })
 
-  test('shows unavailable when BYOK is inactive and the system provider is not configured', async ({ page }) => {
-    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false, true, false))))
+  test('shows the saved-disabled BYOK state', async ({ page }) => {
+    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', true, true, false))))
     await page.goto('/settings/ai-provider')
     await expect(page.getByText('AI 尚未配置', { exact: true })).toBeVisible()
-    await expect(page.getByText('当前没有可用的 AI 配置。', { exact: true })).toBeVisible()
+    await expect(page.getByText('API 已保存，尚未启用', { exact: true })).toBeVisible()
     await expect(page.getByText('系统 AI', { exact: true })).toHaveCount(0)
-    await expect(page.getByText(/系统 AI 会继续工作|新任务将使用系统 AI/)).toHaveCount(0)
   })
 
   test('keeps test available but disables save when secure storage is unavailable', async ({ page }) => {
     await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result({
       ...credential('DISABLED', false, false, false),
       credentialStorageAvailable: false,
-      systemProviderConfigured: false,
     })))
     await page.goto('/settings/ai-provider')
     await page.getByLabel('连接地址').fill('https://api.example.com/v1')
@@ -239,7 +237,7 @@ test.describe('AI settings', () => {
     await expect(page.getByLabel('API 密钥')).toHaveValue('secret-key')
     await page.getByRole('button', { name: /保存/ }).click()
     await expect(page.getByText('配置已保存，尚未启用')).toBeVisible()
-    await expect(page.getByText('启用后，新任务会使用你的 API；不启用时仍使用系统 AI。')).toBeVisible()
+    await expect(page.getByText('启用后，新任务才能使用你的 API。')).toBeVisible()
     await expect(page.getByLabel('API 密钥')).toHaveValue('')
     await expect(page.getByRole('button', { name: '启用' }).first()).toBeVisible()
   })
@@ -281,7 +279,7 @@ test.describe('AI settings', () => {
     await expect(page.locator('.settings-configuration').getByText('服务器暂时无法处理请求，请稍后重试', { exact: true })).toBeVisible()
   })
 
-  test('confirms deletion and returns to the system AI state', async ({ page }) => {
+  test('confirms deletion and returns to the unconfigured state', async ({ page }) => {
     let current = credential('DISABLED', true, true, true)
     await page.route('**/api/settings/ai-provider**', async (route) => {
       if (route.request().method() === 'DELETE') current = credential('DISABLED', false, true, true)
@@ -292,7 +290,7 @@ test.describe('AI settings', () => {
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click()
     await expect(page.getByText('已删除你的 API 密钥')).toBeVisible()
-    await expect(page.getByText('当前使用服务器配置的 AI，无需配置自己的 API。')).toBeVisible()
+    await expect(page.getByText('AI 尚未配置', { exact: true })).toBeVisible()
   })
 
   test('shows active and disable state without mixing it into form actions', async ({ page }) => {
@@ -306,7 +304,7 @@ test.describe('AI settings', () => {
     await page.goto('/settings/ai-provider')
     await expect(page.getByText('你保存的 API 已启用')).toBeVisible()
     await page.getByRole('button', { name: '停用' }).click()
-    await expect(page.getByText('自己的 API 尚未启用')).toBeVisible()
+    await expect(page.getByText('你的 API 已保存，尚未启用')).toBeVisible()
   })
 })
 

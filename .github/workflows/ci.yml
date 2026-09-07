@@ -141,9 +141,9 @@ jobs:
           MINIO_SECRET_KEY=ci-minio-placeholder
           MINIO_BUCKET=cv-role-ci
           JWT_SECRET=ci-jwt-secret-at-least-32-characters-long
-          AI_API_KEY=ci-ai-placeholder
-          AI_BASE_URL=https://example.invalid/v1
-          AI_MODEL=ci-model
+          AI_CREDENTIALS_ENABLED=true
+          AI_CREDENTIALS_ACTIVE_KEY_ID=v1
+          AI_CREDENTIALS_KEY_RING=v1=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
           EMBEDDING_API_KEY=ci-embedding-placeholder
           EMBEDDING_BASE_URL=https://example.invalid/v1
           EMBEDDING_MODEL=ci-embedding-model
@@ -152,6 +152,11 @@ jobs:
           CERTBOT_EMAIL=ci@example.invalid
           EOF
           docker compose -f docker-compose.prod.yml --env-file "$RUNNER_TEMP/cv-role-production.env" config >/dev/null
+          grep -v '^AI_CREDENTIALS_KEY_RING=' "$RUNNER_TEMP/cv-role-production.env" > "$RUNNER_TEMP/cv-role-production-missing-key-ring.env"
+          if docker compose -f docker-compose.prod.yml --env-file "$RUNNER_TEMP/cv-role-production-missing-key-ring.env" config >/dev/null 2>&1; then
+            echo 'Production Compose unexpectedly accepted a missing BYOK key ring' >&2
+            exit 1
+          fi
 
       - name: Build production backend image
         run: docker build -f backend/Dockerfile -t cv-role-backend-ci .
@@ -195,9 +200,9 @@ jobs:
           MINIO_SECRET_KEY=ci-minio-placeholder
           MINIO_BUCKET=cv-role-ops-ci
           JWT_SECRET=ci-jwt-secret-at-least-32-characters-long
-          AI_API_KEY=ci-ai-placeholder
-          AI_BASE_URL=https://example.invalid/v1
-          AI_MODEL=ci-model
+          AI_CREDENTIALS_ENABLED=true
+          AI_CREDENTIALS_ACTIVE_KEY_ID=v1
+          AI_CREDENTIALS_KEY_RING=v1=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
           EMBEDDING_API_KEY=ci-embedding-placeholder
           EMBEDDING_BASE_URL=https://example.invalid/v1
           EMBEDDING_MODEL=ci-embedding-model

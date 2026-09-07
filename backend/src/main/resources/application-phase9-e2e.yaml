@@ -36,7 +36,9 @@ app:
       ai-structured-parse-enabled: false
   ai:
     credentials:
-      enabled: false
+      enabled: true
+      active-key-id: v1
+      key-ring: v1=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     usage:
       retention:
         enabled: false

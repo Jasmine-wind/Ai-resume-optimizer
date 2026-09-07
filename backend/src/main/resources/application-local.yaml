@@ -20,9 +20,9 @@ app:
       base-dir: ${APP_STORAGE_LOCAL_BASE_DIR:${LOCAL_STORAGE_BASE_DIR:uploads}}
   ai:
     openai-compatible:
-      api-key: ${AI_API_KEY:${DASHSCOPE_API_KEY:}}
-      base-url: ${AI_BASE_URL:${OPENAI_BASE_URL:https://api.deepseek.com}}
-      model: ${AI_MODEL:${OPENAI_MODEL:deepseek-v4-flash}}
+      api-key: ${REAL_AI_API_KEY:}
+      base-url: ${REAL_AI_BASE_URL:https://api.deepseek.com}
+      model: ${REAL_AI_MODEL:deepseek-v4-flash}
       timeout-seconds: ${AI_TIMEOUT_SECONDS:${OPENAI_TIMEOUT_SECONDS:90}}
       temperature: ${AI_TEMPERATURE:${OPENAI_TEMPERATURE:0.2}}
       max-tokens: ${AI_MAX_TOKENS:${OPENAI_MAX_TOKENS:16000}}

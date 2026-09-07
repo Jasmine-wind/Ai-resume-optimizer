@@ -1,6 +1,7 @@
 import request from '@/api/request'
 
 export type AiProviderStatus = 'ACTIVE' | 'DISABLED'
+export type AiProviderConfigurationState = 'UNCONFIGURED' | 'SAVED_DISABLED' | 'ACTIVE'
 
 export interface AiProviderCredential {
   providerType: string
@@ -12,7 +13,6 @@ export interface AiProviderCredential {
   apiKeyConfigured: boolean
   maskedApiKey: string
   credentialStorageAvailable?: boolean
-  systemProviderConfigured?: boolean
   credentialRevision?: number
   createdAt?: string
   updatedAt?: string
@@ -32,6 +32,14 @@ export interface AiProviderTestResult {
 }
 
 const endpoint = '/api/settings/ai-provider'
+
+export const resolveAiProviderConfigurationState = (
+  credential: Pick<AiProviderCredential, 'configured' | 'status' | 'credentialStorageAvailable'>,
+): AiProviderConfigurationState => {
+  if (!credential.configured) return 'UNCONFIGURED'
+  if (credential.status === 'ACTIVE' && credential.credentialStorageAvailable === true) return 'ACTIVE'
+  return 'SAVED_DISABLED'
+}
 
 export const getAiProviderSettings = () => request.get<AiProviderCredential>(endpoint)
 

@@ -97,8 +97,15 @@ public class ResumeAiSectionClassifierImpl implements ResumeAiSectionClassifier 
             return skipped(true, "ALL_BLOCKS_RULE_CONFIRMED", startedAt);
         }
         if (selection == null && userId != null) {
-            selection = AiGatewaySupport.selectionForNewTask(
-                    aiGateway, userId, "RESUME_SECTION_CLASSIFY_SELECTION");
+            try {
+                selection = AiGatewaySupport.selectionForNewTask(
+                        aiGateway, userId, "RESUME_SECTION_CLASSIFY_SELECTION");
+            } catch (AiGatewayException exception) {
+                if (exception.getFailureCode() == AiFailureCode.AI_CONFIGURATION_REQUIRED) {
+                    return aiFallback("AI_CONFIGURATION_REQUIRED", startedAt);
+                }
+                throw exception;
+            }
         }
 
         try {

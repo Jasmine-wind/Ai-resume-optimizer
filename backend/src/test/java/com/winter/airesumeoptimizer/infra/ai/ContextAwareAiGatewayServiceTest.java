@@ -24,46 +24,19 @@ import org.mockito.ArgumentCaptor;
 class ContextAwareAiGatewayServiceTest {
 
     @Test
-    void shouldRetryOnceWithoutChangingProviderSelection() {
+    void selectionForNewTaskRequiresActiveByokAndNeverCreatesSystemDefault() {
         AiCredentialService credentialService = mock(AiCredentialService.class);
-        AiProviderAdapter adapter = mock(AiProviderAdapter.class);
-        AiUsageRecorder usageRecorder = mock(AiUsageRecorder.class);
-        AiClientProperties properties = systemProperties();
         ContextAwareAiGatewayService gateway = gateway(
                 credentialService,
-                adapter,
-                usageRecorder,
-                properties);
+                mock(AiProviderAdapter.class),
+                mock(AiUsageRecorder.class),
+                systemProperties());
         when(credentialService.resolveCurrentSelection(42L)).thenReturn(Optional.empty());
-        when(adapter.complete(any(AiProviderRequest.class)))
-                .thenThrow(new AiGatewayException(AiFailureCode.PROVIDER_UNAVAILABLE, "暂时不可用", true))
-                .thenReturn(new AiProviderResponse("ok", 3L, 4L));
 
-        AiCompletionResult result = gateway.complete(
-                AiInvocationContext.user(42L, "TEST_OPERATION", null),
-                request());
-
-        assertThat(result.text()).isEqualTo("ok");
-        assertThat(result.usage().attempts()).isEqualTo(2);
-        ArgumentCaptor<AiProviderRequest> requests = ArgumentCaptor.forClass(AiProviderRequest.class);
-        verify(adapter, org.mockito.Mockito.times(2)).complete(requests.capture());
-        assertThat(requests.getAllValues()).extracting(AiProviderRequest::baseUrl)
-                .containsOnly("https://provider.example.com:443/v1");
-        assertThat(requests.getAllValues()).extracting(AiProviderRequest::model)
-                .containsOnly("system-model");
-        assertThat(requests.getAllValues()).extracting(AiProviderRequest::apiKey)
-                .containsOnly("system-synthetic-key");
-        verify(usageRecorder).recordFailure(any(), any(), any(), anyLong(), anyInt());
-        verify(usageRecorder).recordSuccess(any(), any(), any());
-        assertThat(requests.getAllValues()).allSatisfy(providerRequest -> {
-            assertThat(providerRequest.timeout()).isLessThanOrEqualTo(java.time.Duration.ofSeconds(5));
-            assertThat(providerRequest.messages()).hasSize(2);
-            assertThat(providerRequest.messages().get(0).role()).isEqualTo(AiChatMessage.Role.SYSTEM);
-            assertThat(providerRequest.messages().get(0).content()).contains("Platform security policy", "policy");
-            assertThat(providerRequest.messages().get(0).content()).doesNotContain("UNTRUSTED DATA:\ndata");
-            assertThat(providerRequest.messages().get(1).role()).isEqualTo(AiChatMessage.Role.USER);
-            assertThat(providerRequest.messages().get(1).content()).contains("UNTRUSTED DATA", "data");
-        });
+        assertThatThrownBy(() -> gateway.selectionForNewTask(42L))
+                .isInstanceOf(AiGatewayException.class)
+                .extracting(exception -> ((AiGatewayException) exception).getFailureCode())
+                .isEqualTo(AiFailureCode.AI_CONFIGURATION_REQUIRED);
     }
 
     @Test
@@ -282,7 +255,12 @@ class ContextAwareAiGatewayServiceTest {
                 adapter,
                 usageRecorder,
                 systemProperties());
-        when(credentialService.resolveCurrentSelection(42L)).thenReturn(Optional.empty());
+        AiSelectionSnapshot selection = byokSelection();
+        when(credentialService.resolveCurrentSelection(42L)).thenReturn(Optional.of(selection));
+        when(credentialService.resolveMaterial(42L, selection))
+                .thenReturn(new DecryptedCredentialMaterial(
+                        "byok-decrypted-key", selection.baseUrl(), selection.model(), selection.configJson(),
+                        selection.credentialId(), selection.credentialRevision()));
         when(adapter.complete(any(AiProviderRequest.class)))
                 .thenReturn(new AiProviderResponse("ok", 1L, 1L));
 
@@ -291,7 +269,7 @@ class ContextAwareAiGatewayServiceTest {
                 request());
 
         assertThat(result.text()).isEqualTo("ok");
-        assertThat(result.source()).isEqualTo(AiSource.SYSTEM_DEFAULT);
+        assertThat(result.source()).isEqualTo(AiSource.USER_BYOK);
     }
 
     private AiGatewayRequest request() {

@@ -96,6 +96,43 @@ cd backend
 
 后端默认地址为 `http://localhost:8080`。Swagger UI：`http://localhost:8080/swagger-ui/index.html`。
 
+> 注意：直接执行 `./mvnw spring-boot:run` 时，仓库里的 `.env` 文件不会自动变成当前 fish 进程的环境变量。请使用 shell export / `set -gx`，或由你自己的启动工具加载 `.env`。
+
+#### Fedora + fish：BYOK 本地密钥与 DNS
+
+下面的密钥是 **CV-Role 保存用户 API Key 时使用的本地加密主密钥**，不是 DeepSeek API Key。它必须是 32 bytes；不要把真实值写进仓库：
+
+```fish
+set local_cv_key (openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\\n')
+set -gx AI_CREDENTIALS_ENABLED true
+set -gx AI_CREDENTIALS_ACTIVE_KEY_ID v1
+set -gx AI_CREDENTIALS_KEY_RING "v1=$local_cv_key"
+
+cd backend
+./mvnw spring-boot:run
+```
+
+不要每次启动后端都重新生成 key。保存过 BYOK Credential 后，后续重启必须继续使用同一个 key，否则历史加密密钥无法解密。建议把开发 key 保存到仓库外的 `~/.config/cv-role/` 私有文件中，并执行 `chmod 600`；该文件和 key 都不要提交。
+
+排查 Fedora DNS 时可先运行：
+
+```fish
+getent ahosts api.deepseek.com
+```
+
+也可以在 JVM 启动日志 / 调试信息中检查 JVM 实际解析到的地址。若看到 `198.18.x.x`、`198.19.x.x`、私网或 loopback 地址，这是本地 DNS / proxy 环境问题，不要修改 SSRF policy 来绕过；业务运行时会继续 fail closed。
+
+#### Typst 字体一致性
+
+production 使用固定的 Noto Sans CJK static Regular / Bold 字体。若本地 `APP_RENDER_FONT_PATH` 为空，Typst 会使用系统 font discovery，本地 Preview 可能与 production 不一致。Fedora 可用以下命令确认 Regular / Bold 解析：
+
+```fish
+fc-match 'Noto Sans CJK SC:style=Regular'
+fc-match 'Noto Sans CJK SC:style=Bold'
+```
+
+如需设置 `APP_RENDER_FONT_PATH`，目录只应包含审核过的 Regular / Bold static files。不要把字体文件提交到仓库。
+
 ### 4. 启动前端
 
 ```bash

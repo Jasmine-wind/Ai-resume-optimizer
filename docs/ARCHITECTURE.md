@@ -40,7 +40,7 @@ scripts/  生产运维脚本
 
 当前业务模块：
 
-- `auth` / `user`：账号、登录和当前用户。
+- `auth` / `user`：账号、登录和当前用户；`PATCH /api/users/me` 只允许 JWT 当前用户更新 nickname，返回 `UserProfileVO`，username / email 保持只读。
 - `resume`：简历文件、解析、质量检查与展示模型。
 - `job`：预置岗位、用户目标 JD、岗位解析和旧匹配。
 - `analysis`：诊断、优化建议、局部改写和聚合报告；旧 AI 匹配仍在其中，公开写入口已停用，仅服务历史兼容读取，不再是主链路正式结果。
@@ -56,7 +56,7 @@ scripts/  生产运维脚本
 - `ai/usage`：Provider attempt ledger、独立事务写入和 90 天 retention；不是产品漏斗 Source of Truth。
 - `demo`：只在明确 `demo` profile + property 下创建合成普通 User 数据，不参与生产域模型或授权。
 
-前端按 `api/`、`components/`、`layout/`、`router/`、`stores/`、`types/`、`utils/`、`views/` 分层。页面包含 Landing、首页、我的简历、按正式优化任务访问的岗位分析结果、按正式优化任务访问的优化工作区、达到样本门槛后从首页进入的岗位方向洞察、AI 设置、登录和注册；一级导航仍只有首页和我的简历，AI 设置与洞察都不进入首次使用步骤。全局壳只承担 navigation / account / 窄屏菜单（窄屏 sidebar 为 Drawer），页面标题与任务操作由各页面自身承担。Preview / Export 以 Workspace 内的“编辑 / 预览”模式集成，Preview 使用完整文档阅读区域，仅保存成功状态可用；Workspace 当前采用岗位要求导航 / 简历编辑器 / contextual inspector 的三栏任务壳，检查器只展示当前岗位要求上下文，完整分析仍留在 Analysis 页面，窄屏转为要求横向条 + 编辑 / 建议切换。Element Plus 由 unplugin-vue-components 按需解析，路由懒加载；视觉变量集中在 `styles/tokens.scss`（近白背景、弱边框、少阴影、克制圆角、单一主色），状态色只用于真实反馈。
+前端按 `api/`、`components/`、`layout/`、`router/`、`stores/`、`types/`、`utils/`、`views/` 分层。页面包含 Landing、首页、我的简历、按正式优化任务访问的岗位分析结果、按正式优化任务访问的优化工作区、达到样本门槛后从首页进入的岗位方向洞察、账户设置（个人资料 / AI 设置）、登录和注册；一级导航仍只有首页和我的简历，设置与洞察都不进入首次使用步骤。全局壳只承担 navigation / account / 窄屏菜单（窄屏 sidebar 为 Drawer），账号菜单提供账户设置和 AI 设置快捷入口；Settings shell 在桌面使用窄侧栏，在窄屏使用横向 tabs。页面标题与任务操作由各页面自身承担。Preview / Export 以 Workspace 内的“编辑 / 预览”模式集成，Preview 使用完整文档阅读区域，仅保存成功状态可用；Workspace 当前采用岗位要求导航 / 简历编辑器 / contextual inspector 的三栏任务壳，检查器只展示当前岗位要求上下文，完整分析仍留在 Analysis 页面，窄屏转为要求横向条 + 编辑 / 建议切换。Element Plus 由 unplugin-vue-components 按需解析，路由懒加载；视觉变量集中在 `styles/tokens.scss`（近白背景、弱边框、少阴影、克制圆角、单一主色），状态色只用于真实反馈。
 
 ## 3. 当前主链路
 
@@ -102,7 +102,7 @@ scripts/  生产运维脚本
 - V23 加法式建立用户加密 Credential、OptimizationTask AI Selection Snapshot 与最小 attempt Usage ledger；System Default Secret 不进入数据库，Credential / Task / Usage 使用复合用户归属约束。Phase 9 没有新增业务表或 migration；Insight 与 Observability 均使用已有事实表。
 - pgvector 当前用于简历 / JD 分块语义检索；向量不可用时部分 AI 链路可以降级。
 - 简历原文件由 `FileStorageService` 抽象访问，本地开发默认 local，生产默认 MinIO。
-- Chat 只通过业务侧 `AiGateway` 调用 OpenAI-compatible Adapter；Embedding 保持 Platform-only。二者共享 pinned HTTPS transport，密钥不得进入前端、日志或 Git。
+- Chat 只通过业务侧 `AiGateway` 调用 OpenAI-compatible Adapter；Embedding 保持 Platform-only。二者共享 pinned HTTPS transport，密钥不得进入前端、日志或 Git。AI settings GET 只返回 `credentialStorageAvailable` 与 `systemProviderConfigured` 等 capability，不返回任何 secret；BYOK storage 未启用时仍可 Test，但不能 Save。
 - `application.yaml` 提供公共默认值，`application-local/dev/test/prod.yaml` 负责环境差异；`application-demo.yaml` 与 `application-phase9-e2e.yaml` 明确限制为 fake Provider 的非生产环境。
 
 ## 5. 后续 V2 目标架构边界
@@ -135,7 +135,7 @@ Phase 2 已完成核心领域模型和主链路迁移。Phase 3 已把 Evidence 
 
 当前必须继续保持：JWT 鉴权、参数校验、资源归属检查、日志脱敏、上传限制、私有对象存储、环境变量注入。
 
-Provider / BYOK 已实现并必须继续保持：服务端 AES-256-GCM 加密、掩码显示、替换与删除、复合用户归属、任务级 Selection Snapshot、真实地址 pinning 的 SSRF 防护、Redirect / Proxy / Timeout / 解码后 Response Size 限制、稳定错误映射和 attempt Usage。BYOK 功能关闭时不得阻断 System Default；已冻结 BYOK Task 的 Secret 不可用时不得 fallback。
+Provider / BYOK 已实现并必须继续保持：服务端 AES-256-GCM 加密、掩码显示、替换与删除、复合用户归属、任务级 Selection Snapshot、真实地址 pinning 的 SSRF 防护、Redirect / Proxy / Timeout / 解码后 Response Size 限制、稳定错误映射和 attempt Usage。BYOK 功能关闭时不得阻断 System Default；已冻结 BYOK Task 的 Secret 不可用时不得 fallback。Credential 保存只做 `BaseUrlPolicy.validateStructure`，Test 和实际 outbound 仍做完整 DNS 安全校验；这不是安全边界放宽。
 
 Resume 与 JD 均视为不可信数据，不能覆盖平台指令、Schema 或真实性约束。
 

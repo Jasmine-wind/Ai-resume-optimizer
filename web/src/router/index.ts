@@ -72,6 +72,16 @@ const router = createRouter({
       },
     },
     {
+      path: '/settings/profile',
+      name: 'profile-settings',
+      component: () => import('@/views/settings/ProfileSettingsView.vue'),
+      meta: {
+        requiresAuth: true,
+        title: '个人资料',
+        layoutWidth: 'standard',
+      },
+    },
+    {
       path: '/settings/ai-provider',
       name: 'ai-provider-settings',
       component: () => import('@/views/settings/AiProviderSettingsView.vue'),

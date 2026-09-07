@@ -65,6 +65,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const updateCurrentUser = (user: CurrentUser) => {
+    currentUser.value = user
+  }
+
   const logout = () => {
     clearAuth()
   }
@@ -77,5 +81,6 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     fetchMe,
+    updateCurrentUser,
   }
 })

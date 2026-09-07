@@ -2,6 +2,7 @@ import axios from 'axios'
 import type { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios'
 import type { ApiResult } from '@/types/auth'
 import { clearAuthToken, readAuthToken } from '@/utils/auth-token'
+import { aiFailureMessages, presentAiFailure } from '@/utils/aiFailurePresentation'
 
 interface ApiClient {
   get<T>(url: string, config?: AxiosRequestConfig): Promise<T>
@@ -41,24 +42,12 @@ const redirectUnauthorized = () => {
 }
 
 // 只翻译完整匹配的 AI 错误标识；普通业务文案保持原样，业务码仍使用后端整数。
-const aiFailureMessages = new Map<string, string>([
-  ['INVALID_CREDENTIAL', 'AI 密钥无效或未授权，请检查 AI 设置后重试。'],
-  ['PROVIDER_UNAUTHORIZED', 'AI 密钥无效或未授权，请检查 AI 设置后重试。'],
-  ['MODEL_NOT_FOUND', '当前 AI 模型不可用，请检查模型名称。'],
-  ['RATE_LIMITED', 'AI 服务请求过于频繁，请稍后重试。'],
-  ['TIMEOUT', 'AI 服务响应超时，请稍后重试。'],
-  ['PROVIDER_UNAVAILABLE', 'AI 服务暂时不可用，请稍后重试。'],
-  ['SCHEMA_INVALID', 'AI 返回内容暂时无法使用，请重新生成。'],
-  ['REFUSAL', 'AI 未能在当前事实范围内生成建议，可以重新生成或手工编辑。'],
-  ['UNSAFE_BASE_URL', 'AI 连接未通过安全检查，请检查 AI 设置或网络环境后重试。'],
-  ['RESPONSE_TOO_LARGE', 'AI 返回内容过长，请重新生成。'],
-  ['CREDENTIAL_CHANGED', 'AI 配置已经变化，请刷新后重试。'],
-  ['CONFIGURATION_INVALID', 'AI 配置不完整，请检查 AI 设置。'],
-  ['INTERRUPTED', 'AI 请求已中断，请重新尝试。'],
-])
-
-const translateErrorMessage = (message: string | undefined, fallback: string) =>
-  (message && (aiFailureMessages.get(message) ?? message)) || fallback
+const translateErrorMessage = (message: string | undefined, fallback: string) => {
+  if (!message) return fallback
+  return Object.prototype.hasOwnProperty.call(aiFailureMessages, message)
+    ? presentAiFailure(message, fallback)
+    : message
+}
 
 const unwrapResponse = <T>(response: AxiosResponse<ApiResult<T>>) => {
   const result = response.data

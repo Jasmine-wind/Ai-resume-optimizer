@@ -55,6 +55,19 @@ test.describe('authenticated app shell', () => {
     await expect(
       page.locator('.app-topbar-nav').getByRole('link', { name: '我的简历' }),
     ).toBeVisible()
+
+    await page.getByRole('button', { name: '账号菜单：Polish User' }).click()
+    await expect(page.getByRole('menuitem', { name: '账户设置' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'AI 设置' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: '退出登录' })).toBeVisible()
+  })
+
+  test('account menu routes to profile settings first', async ({ page }) => {
+    await page.goto('/settings/ai-provider')
+    await page.getByRole('button', { name: '账号菜单：Polish User' }).click()
+    await page.getByRole('menuitem', { name: '账户设置' }).click()
+    await expect(page).toHaveURL(/\/settings\/profile$/)
+    await expect(page.getByRole('heading', { name: '个人资料' })).toBeVisible()
   })
 
   test('offers a keyboard skip link and moves focus to the new route', async ({ page }) => {

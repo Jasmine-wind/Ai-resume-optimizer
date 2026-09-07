@@ -36,6 +36,7 @@ declare module 'vue' {
     ResumeSourcePreview: typeof import('./components/resume/ResumeSourcePreview.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SettingsLayout: typeof import('./components/settings/SettingsLayout.vue')['default']
     SkeletonBlock: typeof import('./components/common/SkeletonBlock.vue')['default']
     TaskHeader: typeof import('./components/task/TaskHeader.vue')['default']
     WorkspacePanel: typeof import('./components/workspace/WorkspacePanel.vue')['default']

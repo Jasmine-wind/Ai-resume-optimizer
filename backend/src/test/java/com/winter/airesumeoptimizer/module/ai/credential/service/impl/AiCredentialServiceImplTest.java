@@ -118,45 +118,27 @@ class AiCredentialServiceImplTest {
     }
 
     @Test
-    void saveShouldRejectMixedPublicPrivateDnsBeforePersistence() {
-        AiCredentialServiceImpl mixedDnsService = new AiCredentialServiceImpl(
-                credentialMapper,
-                credentialCipher,
-                new ObjectMapper(),
-                new BaseUrlPolicy(host -> new InetAddress[]{
-                        address("93.184.216.34"),
-                        address("169.254.169.254")}));
-
-        assertThatThrownBy(() -> mixedDnsService.saveOrReplace(USER_ID, request("valid-key")))
-                .isInstanceOf(AiGatewayException.class)
-                .extracting(exception -> ((AiGatewayException) exception).getFailureCode())
-                .isEqualTo(AiFailureCode.UNSAFE_BASE_URL);
-        verify(credentialMapper, never()).insert(any(AiProviderCredential.class));
-    }
-
-    @Test
-    void saveShouldMapBoundedDnsTimeoutWithoutPersistence() {
-        AiCredentialServiceImpl timeoutService = new AiCredentialServiceImpl(
+    void saveShouldValidateStructureWithoutResolvingDns() {
+        AiCredentialServiceImpl serviceWithUnavailableDns = new AiCredentialServiceImpl(
                 credentialMapper,
                 credentialCipher,
                 new ObjectMapper(),
                 new BaseUrlPolicy(host -> {
-                    try {
-                        Thread.sleep(5_000);
-                    } catch (InterruptedException exception) {
-                        Thread.currentThread().interrupt();
-                    }
-                    return new InetAddress[]{address("93.184.216.34")};
-                }, java.time.Duration.ofMillis(100)));
-        long startedAt = System.nanoTime();
+                    throw new AssertionError("save must not resolve DNS");
+                }));
+        when(credentialMapper.selectOne(any())).thenReturn(null);
+        when(credentialMapper.insert(any(AiProviderCredential.class))).thenAnswer(invocation -> {
+            AiProviderCredential created = invocation.getArgument(0);
+            created.setId(77L);
+            return 1;
+        });
+        when(credentialCipher.encrypt(any(), anyLong(), anyLong()))
+                .thenReturn(new CredentialCipher.EncryptedValue("enc:v1:v1:nonce:cipher", "v1"));
 
-        assertThatThrownBy(() -> timeoutService.saveOrReplace(USER_ID, request("valid-key")))
-                .isInstanceOf(AiGatewayException.class)
-                .extracting(exception -> ((AiGatewayException) exception).getFailureCode())
-                .isEqualTo(AiFailureCode.TIMEOUT);
-        assertThat(java.time.Duration.ofNanos(System.nanoTime() - startedAt))
-                .isLessThan(java.time.Duration.ofSeconds(1));
-        verify(credentialMapper, never()).insert(any(AiProviderCredential.class));
+        AiCredentialVO saved = serviceWithUnavailableDns.saveOrReplace(USER_ID, request("valid-key"));
+
+        assertThat(saved.isConfigured()).isTrue();
+        verify(credentialMapper).insert(any(AiProviderCredential.class));
     }
 
     @Test

@@ -17,6 +17,8 @@ public class AiCredentialVO {
     private final boolean configured;
     private final boolean apiKeyConfigured;
     private final String maskedApiKey;
+    private final boolean credentialStorageAvailable;
+    private final boolean systemProviderConfigured;
     private final Long credentialRevision;
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;

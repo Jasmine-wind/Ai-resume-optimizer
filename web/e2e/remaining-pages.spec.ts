@@ -150,6 +150,30 @@ test.describe('auth pages', () => {
   })
 })
 
+test.describe('profile settings', () => {
+  test('updates the display name immediately while keeping account identifiers read only', async ({ page }) => {
+    let current: Omit<typeof user, 'nickname'> & { nickname: string | null } = { ...user }
+    await page.addInitScript(() => localStorage.setItem('ai-resume-token', 'polish-token'))
+    await page.route('**/api/users/me', async (route) => {
+      if (route.request().method() === 'PATCH') {
+        const body = route.request().postDataJSON() as { nickname: string }
+        current = { ...current, nickname: body.nickname.trim() || null }
+      }
+      await route.fulfill(result(current))
+    })
+
+    await page.goto('/settings/profile')
+    await expect(page.getByText(user.username, { exact: true })).toBeVisible()
+    await expect(page.locator('#app-main-content').getByText(user.email, { exact: true })).toBeVisible()
+    const nickname = page.getByLabel('显示名称', { exact: true })
+    await expect(page.getByRole('button', { name: '保存个人资料' })).toBeDisabled()
+    await nickname.fill('李明')
+    await page.getByRole('button', { name: '保存个人资料' }).click()
+    await expect(page.getByRole('status')).toContainText('个人资料已保存')
+    await expect(page.getByRole('button', { name: '账号菜单：李明' })).toBeVisible()
+  })
+})
+
 test.describe('AI settings', () => {
   test.beforeEach(async ({ page }) => {
     await installUser(page)
@@ -159,11 +183,27 @@ test.describe('AI settings', () => {
     await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false))))
     await page.goto('/settings/ai-provider')
     await expect(page.getByRole('heading', { name: '当前使用的 AI' })).toBeVisible()
-    await expect(page.getByText('系统提供的 AI', { exact: true })).toBeVisible()
-    await expect(page.getByText('默认可直接使用，无需先配置自己的 API。')).toBeVisible()
+    await expect(page.getByText('系统 AI', { exact: true })).toBeVisible()
+    await expect(page.getByText('当前使用服务器配置的 AI，无需先配置自己的 API。')).toBeVisible()
   })
 
-  test('keeps key input empty after test and save, then exposes the explicit enable step', async ({ page }) => {
+  test('keeps test available but disables save when secure storage is unavailable', async ({ page }) => {
+    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result({
+      ...credential('DISABLED', false),
+      credentialStorageAvailable: false,
+      systemProviderConfigured: false,
+    })))
+    await page.goto('/settings/ai-provider')
+    await page.getByLabel('连接地址').fill('https://api.example.com/v1')
+    await page.getByLabel('API 密钥').fill('secret-key')
+    await page.getByLabel('模型').fill('polish-model')
+    await expect(page.getByRole('button', { name: '测试连接' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: '保存配置' })).toBeDisabled()
+    await expect(page.getByText('AI 尚未配置', { exact: true })).toBeVisible()
+    await expect(page.getByText(/当前部署尚未启用 API 密钥保存/)).toBeVisible()
+  })
+
+  test('keeps the key after test, then clears it only after save and exposes the enable step', async ({ page }) => {
     let current = credential('DISABLED')
     await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(current)))
     await page.route('**/api/settings/ai-provider/test', (route) => route.fulfill(result({ success: true, message: '连接正常' })))
@@ -180,8 +220,7 @@ test.describe('AI settings', () => {
     await page.getByLabel('API 密钥').fill('secret-key')
     await page.getByLabel('模型').fill('polish-model')
     await page.getByRole('button', { name: '测试连接' }).click()
-    await expect(page.getByLabel('API 密钥')).toHaveValue('')
-    await page.getByLabel('API 密钥').fill('secret-key')
+    await expect(page.getByLabel('API 密钥')).toHaveValue('secret-key')
     await page.getByRole('button', { name: /保存/ }).click()
     await expect(page.getByText('配置已保存，尚未启用')).toBeVisible()
     await expect(page.getByLabel('API 密钥')).toHaveValue('')
@@ -219,8 +258,7 @@ test.describe('AI settings', () => {
     await page.getByLabel('模型').fill('polish-model')
     await page.getByRole('button', { name: '测试连接' }).click()
     await expect(page.getByText('连接测试失败', { exact: true })).toBeVisible()
-    await expect(page.getByLabel('API 密钥')).toHaveValue('')
-    await page.getByLabel('API 密钥').fill('secret-key')
+    await expect(page.getByLabel('API 密钥')).toHaveValue('secret-key')
     await page.getByRole('button', { name: '保存配置' }).click()
     await expect(page.getByText('保存配置失败', { exact: true })).toBeVisible()
     await expect(page.locator('.settings-configuration').getByText('服务器暂时无法处理请求，请稍后重试', { exact: true })).toBeVisible()
@@ -237,7 +275,7 @@ test.describe('AI settings', () => {
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click()
     await expect(page.getByText('已删除你的 API 密钥')).toBeVisible()
-    await expect(page.getByText('默认可直接使用，无需先配置自己的 API。')).toBeVisible()
+    await expect(page.getByText('当前使用服务器配置的 AI，无需先配置自己的 API。')).toBeVisible()
   })
 
   test('shows active and disable state without mixing it into form actions', async ({ page }) => {

@@ -11,6 +11,8 @@ export interface AiProviderCredential {
   configured: boolean
   apiKeyConfigured: boolean
   maskedApiKey: string
+  credentialStorageAvailable?: boolean
+  systemProviderConfigured?: boolean
   credentialRevision?: number
   createdAt?: string
   updatedAt?: string

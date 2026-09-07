@@ -503,6 +503,7 @@ onBeforeRouteUpdate(confirmDiscardUnsavedChanges)
                 :focused-bullet-id="selectedWorkspaceBulletId"
                 :focus-request-key="focusRequestKey"
                 @change="handleEditorChange"
+                @reopen-inspector="openInspector"
               />
             </div>
           </section>

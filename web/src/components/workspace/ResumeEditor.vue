@@ -29,6 +29,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   change: [document: ResumeDocument]
+  reopenInspector: []
 }>()
 
 const LIMITS = {
@@ -688,8 +689,18 @@ const SUGGEST_INTENTS: Array<{ command: BulletSuggestIntent | 'CUSTOM'; label: s
 const suggestActive = (bulletId: string) =>
   !!props.suggest && props.suggest.activeBulletId.value === bulletId
 
+const handleSuggestButtonClick = (bulletId: string) => {
+  if (props.suggest?.activeBulletId.value === bulletId && !props.suggest.busy.value) {
+    emit('reopenInspector')
+  }
+}
+
 const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | 'CUSTOM') => {
   if (!props.suggest || props.suggest.busy.value) return
+  if (props.suggest.activeBulletId.value === bulletId) {
+    emit('reopenInspector')
+    return
+  }
   if (props.suggestLocked) {
     ElMessage.warning('请先完成保存，再生成建议')
     return
@@ -1297,11 +1308,10 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
                       <el-button
                         class="bullet-suggest-button"
                         size="small"
-                        :disabled="
-                          suggest.busy.value || suggestActive(bullet.id) || !bullet.text.trim()
-                        "
+                        :disabled="suggest.busy.value || !bullet.text.trim()"
+                        @click="handleSuggestButtonClick(bullet.id)"
                       >
-                        AI 优化
+                        {{ suggestActive(bullet.id) ? '查看 AI 建议' : 'AI 优化' }}
                       </el-button>
                       <template #dropdown>
                         <el-dropdown-menu>

@@ -61,6 +61,8 @@ jobs:
           sudo mv /tmp/typst-x86_64-unknown-linux-musl/typst /usr/local/bin/typst
           sudo chmod +x /usr/local/bin/typst
           typst --version
+          FONT_DIR=$(dirname "$(find /usr/share/fonts -type f -name 'NotoSansCJK-Regular.ttc' | head -n 1)")
+          test -n "$FONT_DIR" && echo "APP_RENDER_FONT_PATH=$FONT_DIR" >> "$GITHUB_ENV"
 
       - name: Start ephemeral MinIO lifecycle target
         run: |
@@ -404,6 +406,8 @@ jobs:
           tar -xJf /tmp/typst.tar.xz -C /tmp
           sudo mv /tmp/typst-x86_64-unknown-linux-musl/typst /usr/local/bin/typst
           sudo chmod +x /usr/local/bin/typst
+          FONT_DIR=$(dirname "$(find /usr/share/fonts -type f -name 'NotoSansCJK-Regular.ttc' | head -n 1)")
+          test -n "$FONT_DIR" && echo "APP_RENDER_FONT_PATH=$FONT_DIR" >> "$GITHUB_ENV"
 
       - name: Install frontend and Chromium dependencies
         working-directory: web

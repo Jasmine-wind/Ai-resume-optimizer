@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ErrorState from '@/components/common/ErrorState.vue'
-import PageHeader from '@/components/common/PageHeader.vue'
+import SettingsLayout from '@/components/settings/SettingsLayout.vue'
+import { presentAiFailure } from '@/utils/aiFailurePresentation'
 import SkeletonBlock from '@/components/common/SkeletonBlock.vue'
 import {
   deleteAiProvider,
@@ -20,7 +21,7 @@ const saving = ref(false)
 const testing = ref(false)
 const actionLoading = ref(false)
 const settings = ref<AiProviderCredential | null>(null)
-const testResult = ref<{ success: boolean; message: string } | null>(null)
+const testResult = ref<{ success: boolean; message: string; failureCode?: string } | null>(null)
 const saveError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const savedNeedsEnable = ref(false)
@@ -33,17 +34,21 @@ const form = reactive({
 
 const configured = computed(() => Boolean(settings.value?.configured))
 const active = computed(() => settings.value?.status === 'ACTIVE')
-const canSubmit = computed(() =>
-  Boolean(form.baseUrl.trim() && form.apiKey.trim() && form.model.trim()),
-)
+const storageAvailable = computed(() => settings.value?.credentialStorageAvailable ?? true)
+const systemConfigured = computed(() => settings.value?.systemProviderConfigured ?? true)
+const byokAvailable = computed(() => active.value && storageAvailable.value)
+const canTest = computed(() => Boolean(form.baseUrl.trim() && form.apiKey.trim() && form.model.trim()))
+const canSubmit = computed(() => Boolean(storageAvailable.value && canTest.value))
 const statusLabel = computed(() => {
-  if (!configured.value) return '系统提供的 AI'
-  return active.value ? '你的 API' : '系统提供的 AI'
+  if (byokAvailable.value) return '你的 API'
+  if (systemConfigured.value) return '系统 AI'
+  return 'AI 尚未配置'
 })
 const currentAiDescription = computed(() => {
-  if (active.value) return '你保存的 API 已启用，新任务会使用它。'
-  if (configured.value) return '你的配置已保存但尚未启用；系统提供的 AI 仍可正常使用。'
-  return '默认可直接使用，无需先配置自己的 API。'
+  if (byokAvailable.value) return '你保存的 API 已启用，新任务会使用它。'
+  if (configured.value && storageAvailable.value) return '你的配置已保存但尚未启用；系统 AI 会继续用于新任务。'
+  if (systemConfigured.value) return '当前使用服务器配置的 AI，无需先配置自己的 API。'
+  return '当前没有可用的 AI 配置；你可以测试自己的 API，保存前需要服务端启用密钥存储。'
 })
 
 const copySettingsToForm = (value: AiProviderCredential) => {
@@ -74,26 +79,29 @@ const input = () => ({
 })
 
 const handleTest = async () => {
-  if (!canSubmit.value || testing.value) return
+  if (!canTest.value || testing.value) return
   testing.value = true
   testResult.value = null
   try {
     const result = await testAiProvider(input())
+    const message = result.message || '连接测试没有通过'
     testResult.value = {
       success: result.success,
-      message: result.message,
+      failureCode: result.failureCode,
+      message: result.success
+        ? message
+        : presentAiFailure(result.failureCode, message, 'settings'),
     }
     if (result.success) ElMessage.success('连接测试成功')
-    else ElMessage.error(result.message || '连接测试没有通过')
+    else ElMessage.error(testResult.value?.message ?? message)
   } catch (error) {
     testResult.value = {
       success: false,
       message: error instanceof Error ? error.message : '连接测试失败',
     }
-    ElMessage.error(testResult.value.message)
+    ElMessage.error(testResult.value?.message ?? '连接测试失败')
   } finally {
     testing.value = false
-    form.apiKey = ''
   }
 }
 
@@ -108,11 +116,12 @@ const handleSave = async () => {
     testResult.value = null
     ElMessage.success('配置已保存；为保护账号安全，当前仍处于停用状态，需要手动启用')
   } catch (error) {
-    saveError.value = error instanceof Error ? error.message : '保存配置失败'
+    saveError.value = !storageAvailable.value || (error instanceof Error && error.message.includes('AI 配置不完整'))
+      ? '当前环境暂时无法安全保存 API 密钥，请检查服务端密钥存储配置。'
+      : error instanceof Error ? error.message : '保存配置失败'
     ElMessage.error(saveError.value)
   } finally {
     saving.value = false
-    form.apiKey = ''
   }
 }
 
@@ -165,16 +174,20 @@ const handleDelete = async () => {
   }
 }
 
+watch(
+  () => [form.baseUrl, form.apiKey, form.model],
+  () => {
+    testResult.value = null
+    saveError.value = null
+  },
+)
+
 onMounted(load)
 </script>
 
 <template>
-  <section class="settings-page">
-    <PageHeader
-      eyebrow="账户设置"
-      title="AI 设置"
-      description="普通岗位分析无需配置。只有使用自己的 API 密钥时，才需要填写这里。"
-    />
+  <SettingsLayout current="ai-provider">
+    <section class="settings-page">
 
     <SkeletonBlock v-if="loading" title :rows="8" />
 
@@ -187,19 +200,25 @@ onMounted(load)
     />
 
     <template v-else>
+      <section class="settings-content-heading">
+        <p class="settings-section-label">高级能力</p>
+        <h2>AI 设置</h2>
+        <p>普通岗位分析无需配置。只有使用自己的 API 密钥时，才需要填写这里。</p>
+      </section>
+
       <section class="settings-current-ai" aria-labelledby="current-ai-title">
         <div>
           <p class="settings-section-label">当前状态</p>
           <h2 id="current-ai-title">当前使用的 AI</h2>
           <p>{{ currentAiDescription }}</p>
         </div>
-        <div class="settings-current-ai-status" :class="active ? 'is-active' : 'is-system'">
+        <div class="settings-current-ai-status" :class="{ 'is-active': byokAvailable, 'is-system': !byokAvailable && systemConfigured, 'is-unavailable': !byokAvailable && !systemConfigured }">
           <span class="settings-status-dot" aria-hidden="true" />
           <strong>{{ statusLabel }}</strong>
         </div>
       </section>
 
-      <div v-if="savedNeedsEnable && configured && !active" class="settings-next-step" role="status">
+      <div v-if="savedNeedsEnable && configured && storageAvailable && !active" class="settings-next-step" role="status">
         <strong>配置已保存，尚未启用</strong>
         <span>如果要让新任务使用自己的 API，请启用它；否则系统 AI 会继续工作。</span>
         <el-button type="primary" :loading="actionLoading" @click="handleToggle">启用</el-button>
@@ -215,6 +234,10 @@ onMounted(load)
         <p v-if="configured" class="settings-current-key">
           已保存密钥：<strong>{{ settings?.maskedApiKey || '已配置' }}</strong>
           <span> · 替换后会自动停用，需要再次启用。</span>
+        </p>
+
+        <p v-if="!storageAvailable" class="settings-storage-note" role="status">
+          当前部署尚未启用 API 密钥保存。连接测试仍可使用；如需保存自己的 API，请先完成服务端密钥存储配置。
         </p>
 
         <el-form label-position="top" class="settings-form" @submit.prevent="handleSave">
@@ -242,14 +265,14 @@ onMounted(load)
           </el-form-item>
 
           <div class="settings-actions">
-            <el-button :loading="testing" :disabled="!canSubmit" @click="handleTest">测试连接</el-button>
+            <el-button :loading="testing" :disabled="!canTest" @click="handleTest">测试连接</el-button>
             <el-button type="primary" native-type="submit" :loading="saving" :disabled="!canSubmit">
               {{ configured ? '保存并替换' : '保存配置' }}
             </el-button>
           </div>
         </el-form>
 
-        <section v-if="testResult" class="settings-test-result" :class="testResult.success ? 'is-success' : 'is-error'" role="status">
+        <section v-if="testResult" class="settings-test-result" :class="testResult.success ? 'is-success' : 'is-error'" :role="testResult.success ? 'status' : 'alert'">
           <strong>{{ testResult.success ? '连接测试成功' : '连接测试失败' }}</strong>
           <p>{{ testResult.message }}</p>
         </section>
@@ -259,14 +282,14 @@ onMounted(load)
         </section>
       </section>
 
-      <section v-if="configured" class="settings-status-actions" aria-labelledby="status-actions-title">
+      <section v-if="configured && storageAvailable" class="settings-status-actions" aria-labelledby="status-actions-title">
         <div>
           <p class="settings-section-label">配置状态</p>
-          <h2 id="status-actions-title">{{ active ? '自己的 API 已启用' : '自己的 API 尚未启用' }}</h2>
-          <p>{{ active ? '新岗位分析会使用已保存的连接。' : '启用后，新岗位分析才会使用已保存的连接。' }}</p>
+          <h2 id="status-actions-title">{{ byokAvailable ? '自己的 API 已启用' : '自己的 API 尚未启用' }}</h2>
+          <p>{{ byokAvailable ? '新岗位分析会使用已保存的连接。' : '启用后，新岗位分析才会使用已保存的连接。' }}</p>
         </div>
-        <el-button :type="active ? 'default' : 'primary'" :loading="actionLoading" @click="handleToggle">
-          {{ active ? '停用' : '启用' }}
+        <el-button :type="byokAvailable ? 'default' : 'primary'" :loading="actionLoading" @click="handleToggle">
+          {{ byokAvailable ? '停用' : '启用' }}
         </el-button>
       </section>
 
@@ -291,7 +314,8 @@ onMounted(load)
         <el-button type="danger" plain :loading="actionLoading" @click="handleDelete">删除</el-button>
       </section>
     </template>
-  </section>
+    </section>
+  </SettingsLayout>
 </template>
 
 <style scoped>
@@ -300,6 +324,7 @@ onMounted(load)
   gap: var(--app-section-spacing);
 }
 
+.settings-content-heading,
 .settings-current-ai,
 .settings-configuration,
 .settings-status-actions,
@@ -324,6 +349,7 @@ onMounted(load)
   gap: var(--app-space-2);
 }
 
+.settings-content-heading h2,
 .settings-current-ai h2,
 .settings-section-header h2,
 .settings-status-actions h2,
@@ -335,6 +361,7 @@ onMounted(load)
   line-height: var(--app-line-height-tight);
 }
 
+.settings-content-heading > p:last-child,
 .settings-current-ai p,
 .settings-section-header p,
 .settings-status-actions p,
@@ -376,8 +403,36 @@ onMounted(load)
   background: var(--app-accent);
 }
 
-.settings-current-ai-status.is-active .settings-status-dot {
+.settings-current-ai-status.is-active .settings-status-dot,
+.settings-current-ai-status.is-system .settings-status-dot {
   background: var(--app-success);
+}
+
+.settings-current-ai-status.is-unavailable .settings-status-dot {
+  background: var(--app-warning);
+}
+
+.settings-content-heading {
+  display: grid;
+  gap: var(--app-space-2);
+  border-bottom: 1px solid var(--app-border-strong);
+  padding-bottom: var(--app-space-5);
+}
+
+.settings-content-heading h2 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 22px;
+}
+
+.settings-storage-note {
+  max-width: 680px;
+  margin: 0 0 var(--app-space-5);
+  border-left: 2px solid var(--app-warning);
+  padding-left: var(--app-space-3);
+  color: var(--app-text-secondary);
+  font-size: var(--app-font-size-sm);
+  line-height: var(--app-line-height-body);
 }
 
 .settings-next-step {

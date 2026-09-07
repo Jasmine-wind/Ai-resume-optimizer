@@ -48,7 +48,11 @@ const primaryNavItems = [
 ]
 
 const handleAccountCommand = (command: string) => {
-  if (command === 'settings') {
+  if (command === 'profile') {
+    router.push('/settings/profile')
+    return
+  }
+  if (command === 'ai-provider') {
     router.push('/settings/ai-provider')
     return
   }
@@ -106,7 +110,8 @@ const handleAccountCommand = (command: string) => {
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="settings">AI 设置</el-dropdown-item>
+            <el-dropdown-item command="profile">账户设置</el-dropdown-item>
+            <el-dropdown-item command="ai-provider">AI 设置</el-dropdown-item>
             <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </template>

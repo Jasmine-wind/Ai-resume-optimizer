@@ -9,13 +9,15 @@ import org.junit.jupiter.api.Test;
 class ResumeTemplateIdTest {
 
     @Test
-    void currentClassicUsesVersionFourAndKeepsVersionThreeResource() {
-        assertThat(ResumeTemplateId.CLASSIC.getTemplateVersion()).isEqualTo("4");
+    void currentClassicUsesVersionFiveAndKeepsPreviousResources() {
+        assertThat(ResumeTemplateId.CLASSIC.getTemplateVersion()).isEqualTo("5");
         assertThat(ResumeTemplateId.CLASSIC.getResourcePath())
-                .isEqualTo("typst/classic/v4/main.typ");
+                .isEqualTo("typst/classic/v5/main.typ");
         assertThat(Files.isRegularFile(Path.of("src/main/resources/typst/classic/v3/main.typ")))
                 .isTrue();
         assertThat(Files.isRegularFile(Path.of("src/main/resources/typst/classic/v4/main.typ")))
+                .isTrue();
+        assertThat(Files.isRegularFile(Path.of("src/main/resources/typst/classic/v5/main.typ")))
                 .isTrue();
     }
 

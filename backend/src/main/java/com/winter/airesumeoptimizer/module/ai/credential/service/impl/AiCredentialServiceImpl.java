@@ -1,6 +1,7 @@
 package com.winter.airesumeoptimizer.module.ai.credential.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.winter.airesumeoptimizer.infra.ai.AiClientProperties;
 import com.winter.airesumeoptimizer.infra.ai.AiFailureCode;
 import com.winter.airesumeoptimizer.infra.ai.AiGatewayException;
 import com.winter.airesumeoptimizer.infra.ai.AiGenerationConfig;
@@ -37,13 +38,15 @@ public class AiCredentialServiceImpl implements AiCredentialService {
     private final CredentialCipher credentialCipher;
     private final ObjectMapper objectMapper;
     private final BaseUrlPolicy baseUrlPolicy;
+    private final AiClientProperties systemProperties;
 
     @Autowired
     public AiCredentialServiceImpl(
             AiProviderCredentialMapper credentialMapper,
             CredentialCipher credentialCipher,
-            ObjectMapper objectMapper) {
-        this(credentialMapper, credentialCipher, objectMapper, new BaseUrlPolicy());
+            ObjectMapper objectMapper,
+            AiClientProperties systemProperties) {
+        this(credentialMapper, credentialCipher, objectMapper, new BaseUrlPolicy(), systemProperties);
     }
 
     AiCredentialServiceImpl(
@@ -51,10 +54,20 @@ public class AiCredentialServiceImpl implements AiCredentialService {
             CredentialCipher credentialCipher,
             ObjectMapper objectMapper,
             BaseUrlPolicy baseUrlPolicy) {
+        this(credentialMapper, credentialCipher, objectMapper, baseUrlPolicy, new AiClientProperties());
+    }
+
+    AiCredentialServiceImpl(
+            AiProviderCredentialMapper credentialMapper,
+            CredentialCipher credentialCipher,
+            ObjectMapper objectMapper,
+            BaseUrlPolicy baseUrlPolicy,
+            AiClientProperties systemProperties) {
         this.credentialMapper = credentialMapper;
         this.credentialCipher = credentialCipher;
         this.objectMapper = objectMapper;
         this.baseUrlPolicy = baseUrlPolicy;
+        this.systemProperties = systemProperties;
     }
 
     @Override
@@ -66,6 +79,9 @@ public class AiCredentialServiceImpl implements AiCredentialService {
     @Override
     @Transactional
     public AiCredentialVO saveOrReplace(Long userId, AiCredentialUpsertRequestDTO request) {
+        if (!credentialCipher.isEnabled()) {
+            throw new AiGatewayException(AiFailureCode.CONFIGURATION_INVALID, "AI Credential 加密配置不可用");
+        }
         ValidatedInput input = validateInput(request);
         AiProviderCredential existing = find(userId);
         LocalDateTime now = LocalDateTime.now();
@@ -258,7 +274,7 @@ public class AiCredentialServiceImpl implements AiCredentialService {
         }
         final URI normalizedBaseUrl;
         try {
-            normalizedBaseUrl = baseUrlPolicy.validateAndResolve(request.getBaseUrl()).uri();
+            normalizedBaseUrl = baseUrlPolicy.validateStructure(request.getBaseUrl());
         } catch (OutboundTransportException exception) {
             if (exception.getKind() == OutboundTransportException.Kind.TIMEOUT) {
                 throw new AiGatewayException(AiFailureCode.TIMEOUT, "AI Provider DNS 解析超时");
@@ -315,6 +331,8 @@ public class AiCredentialServiceImpl implements AiCredentialService {
                 .configured(true)
                 .apiKeyConfigured(true)
                 .maskedApiKey("••••••••")
+                .credentialStorageAvailable(credentialCipher.isEnabled())
+                .systemProviderConfigured(systemProviderConfigured())
                 .credentialRevision(credential.getCredentialRevision())
                 .createdAt(credential.getCreatedAt())
                 .updatedAt(credential.getUpdatedAt())
@@ -329,7 +347,16 @@ public class AiCredentialServiceImpl implements AiCredentialService {
                 .apiKeyConfigured(false)
                 .maskedApiKey("")
                 .config(Map.of())
+                .credentialStorageAvailable(credentialCipher.isEnabled())
+                .systemProviderConfigured(systemProviderConfigured())
                 .build();
+    }
+
+    private boolean systemProviderConfigured() {
+        return systemProperties != null
+                && systemProperties.getApiKey() != null && !systemProperties.getApiKey().isBlank()
+                && systemProperties.getBaseUrl() != null && !systemProperties.getBaseUrl().isBlank()
+                && systemProperties.getModel() != null && !systemProperties.getModel().isBlank();
     }
 
     private Map<String, Object> readConfig(String configJson) {

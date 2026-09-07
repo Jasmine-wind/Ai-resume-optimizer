@@ -10,6 +10,7 @@ spring:
     # Spring AI's optional audio starter must not create a platform-owned
     # provider bean. Generation is handled by the credential-aware gateway.
     model:
+      chat: none
       audio:
         speech: none
         transcription: none

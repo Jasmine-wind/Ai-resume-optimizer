@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -88,6 +91,7 @@ import com.winter.airesumeoptimizer.module.resume.vo.ResumeParseResultVO;
 import com.winter.airesumeoptimizer.module.resume.vo.ResumeUploadVO;
 import com.winter.airesumeoptimizer.module.task.vo.AsyncTaskVO;
 import com.winter.airesumeoptimizer.module.user.controller.UserController;
+import com.winter.airesumeoptimizer.module.user.dto.UpdateUserProfileRequestDTO;
 import com.winter.airesumeoptimizer.module.user.service.UserService;
 import com.winter.airesumeoptimizer.module.user.vo.UserProfileVO;
 import com.winter.airesumeoptimizer.module.workspace.controller.WorkspaceContentController;
@@ -105,6 +109,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -421,6 +426,61 @@ class Phase1ApiIntegrationTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.id").value(1))
                 .andExpect(jsonPath("$.data.username").value("winter"));
+    }
+
+    @Test
+    void profilePatchUsesAuthenticatedUserTrimsNicknameAndEnforcesLength() throws Exception {
+        when(userService.updateCurrentUserProfile(eq(1L), any(UpdateUserProfileRequestDTO.class)))
+                .thenAnswer(invocation -> {
+                    UpdateUserProfileRequestDTO request = invocation.getArgument(1);
+                    return UserProfileVO.builder()
+                            .id(1L)
+                            .username("winter")
+                            .email("winter@example.com")
+                            .nickname(request.getNickname())
+                            .createdAt(LocalDateTime.now())
+                            .build();
+                });
+
+        String fiftyCharacters = "a".repeat(50);
+        mockMvc.perform(patch("/api/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"  李明  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.nickname").value("李明"));
+
+        ArgumentCaptor<UpdateUserProfileRequestDTO> requestCaptor =
+                ArgumentCaptor.forClass(UpdateUserProfileRequestDTO.class);
+        verify(userService).updateCurrentUserProfile(eq(1L), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getNickname()).isEqualTo("李明");
+
+        mockMvc.perform(patch("/api/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("nickname", fiftyCharacters))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.nickname").value(fiftyCharacters));
+
+        mockMvc.perform(patch("/api/users/me")
+                        .header(HttpHeaders.AUTHORIZATION, AUTHORIZATION)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("nickname", fiftyCharacters + "x"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(400));
+        verify(userService, times(2)).updateCurrentUserProfile(eq(1L), any(UpdateUserProfileRequestDTO.class));
+
+        when(userService.getCurrentUserProfile(1L)).thenReturn(UserProfileVO.builder()
+                .id(1L)
+                .username("winter")
+                .email("winter@example.com")
+                .nickname("李明")
+                .createdAt(LocalDateTime.now())
+                .build());
+        mockMvc.perform(get("/api/users/me").header(HttpHeaders.AUTHORIZATION, AUTHORIZATION))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.nickname").value("李明"));
     }
 
     @Test

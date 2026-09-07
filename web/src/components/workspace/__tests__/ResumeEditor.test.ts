@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 import ResumeEditor from '@/components/workspace/ResumeEditor.vue'
 import type { ResumeDocument } from '@/types/resume-document'
+import type { BulletSuggestController } from '@/utils/useBulletSuggest'
 
 const confirmEntryDelete = vi.hoisted(() => vi.fn())
 
@@ -18,9 +19,14 @@ const elementPlusStubs = vi.hoisted(() => ({
   },
   ElButton: {
     props: ['disabled', 'loading'],
-    template: '<button :disabled="disabled"><slot /></button>',
+    emits: ['click'],
+    template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
   },
-  ElDropdown: { template: '<div><slot /></div>' },
+  ElDropdown: {
+    name: 'ElDropdown',
+    emits: ['command'],
+    template: '<div><slot /></div>',
+  },
   ElDropdownMenu: { template: '<div><slot /></div>' },
   ElDropdownItem: { template: '<div><slot /></div>' },
   ElMessageBox: { confirm: confirmEntryDelete },
@@ -33,6 +39,14 @@ vi.mock('element-plus', () => ({
 
 // unplugin-vue-components 将模板组件从 element-plus/es 局部导入；两处均替换为稳定测试 stub。
 vi.mock('element-plus/es', () => elementPlusStubs)
+
+const makeSuggest = (activeBulletId: string | null, busy = false) => ({
+  activeBulletId: ref(activeBulletId),
+  busy: ref(busy),
+  candidate: ref(null),
+  suggest: vi.fn(),
+  startCustomCompose: vi.fn(),
+}) as unknown as BulletSuggestController
 
 const makeDocument = (): ResumeDocument => ({
   schemaVersion: 'RESUME_DOCUMENT_V1',
@@ -73,6 +87,63 @@ describe('ResumeEditor', () => {
     expect(wrapper.find('.resume-page-footer').exists()).toBe(false)
     expect(wrapper.find('.section-entry-count').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('添加职位、时间或地点')
+  })
+
+  it('reopens an existing inspector from an active bullet error state without generating', async () => {
+    const suggest = makeSuggest('b1')
+    const wrapper = mount(ResumeEditor, {
+      props: { document: makeDocument(), suggest, suggestEnabled: true },
+    })
+
+    const action = wrapper.get('.bullet-suggest-button')
+    expect(action.text()).toBe('查看 AI 建议')
+    await action.trigger('click')
+
+    expect(wrapper.emitted('reopenInspector')).toHaveLength(1)
+    expect(suggest.suggest).not.toHaveBeenCalled()
+  })
+
+  it('reopens an existing ready inspector without discarding its candidate', async () => {
+    const suggest = makeSuggest('b1')
+    const candidate = { requestId: 'request-1', suggestedText: '候选文本' }
+    suggest.candidate.value = candidate as never
+    const wrapper = mount(ResumeEditor, {
+      props: { document: makeDocument(), suggest, suggestEnabled: true },
+    })
+
+    await wrapper.get('.bullet-suggest-button').trigger('click')
+
+    expect(wrapper.emitted('reopenInspector')).toHaveLength(1)
+    expect(suggest.candidate.value).toEqual(candidate)
+    expect(suggest.suggest).not.toHaveBeenCalled()
+  })
+
+  it('disables AI actions while a suggestion is requesting', async () => {
+    const suggest = makeSuggest('b1', true)
+    const wrapper = mount(ResumeEditor, {
+      props: { document: makeDocument(), suggest, suggestEnabled: true },
+    })
+
+    const action = wrapper.get('.bullet-suggest-button')
+    expect(action.attributes('disabled')).toBeDefined()
+    await action.trigger('click')
+    expect(wrapper.emitted('reopenInspector')).toBeUndefined()
+    expect(suggest.suggest).not.toHaveBeenCalled()
+  })
+
+  it('keeps a different bullet on the normal suggest flow when another bullet is active', async () => {
+    const document = makeDocument()
+    document.sections[0]!.entries[0]!.bullets.push({ id: 'b2', text: '负责缓存设计' })
+    const suggest = makeSuggest('b1')
+    const wrapper = mount(ResumeEditor, {
+      props: { document, suggest, suggestEnabled: true },
+    })
+
+    const dropdowns = wrapper.findAllComponents({ name: 'ElDropdown' })
+    await dropdowns[1]!.vm.$emit('command', 'SIMPLIFY')
+
+    expect(suggest.suggest).toHaveBeenCalledWith('b2', 'SIMPLIFY')
+    expect(wrapper.emitted('reopenInspector')).toBeUndefined()
   })
 
   it('edits a bullet when the document prop is a reactive proxy', async () => {

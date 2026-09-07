@@ -32,24 +32,55 @@ const form = reactive({
   model: '',
 })
 
+type EffectiveAiState = 'USER_BYOK' | 'SYSTEM' | 'UNAVAILABLE'
+
 const configured = computed(() => Boolean(settings.value?.configured))
 const active = computed(() => settings.value?.status === 'ACTIVE')
-const storageAvailable = computed(() => settings.value?.credentialStorageAvailable ?? true)
-const systemConfigured = computed(() => settings.value?.systemProviderConfigured ?? true)
-const byokAvailable = computed(() => active.value && storageAvailable.value)
+// Capability fields are part of the current backend contract. Missing fields fail closed so an
+// older or malformed response cannot claim that secrets are safely stored or System AI is ready.
+const storageAvailable = computed(() => settings.value?.credentialStorageAvailable ?? false)
+const systemConfigured = computed(() => settings.value?.systemProviderConfigured ?? false)
+const effectiveAiState = computed<EffectiveAiState>(() => {
+  if (active.value && storageAvailable.value) return 'USER_BYOK'
+  if (systemConfigured.value) return 'SYSTEM'
+  return 'UNAVAILABLE'
+})
 const canTest = computed(() => Boolean(form.baseUrl.trim() && form.apiKey.trim() && form.model.trim()))
 const canSubmit = computed(() => Boolean(storageAvailable.value && canTest.value))
+const currentAiDescription = computed(() => {
+  switch (effectiveAiState.value) {
+    case 'USER_BYOK':
+      return '你保存的 API 已启用，新任务会使用它。'
+    case 'SYSTEM':
+      return '当前使用服务器配置的 AI，无需配置自己的 API。'
+    case 'UNAVAILABLE':
+      return configured.value && storageAvailable.value
+        ? '你的 API 已保存但尚未启用；当前没有其它可用 AI。'
+        : '当前没有可用的 AI 配置。'
+    default:
+      return '当前没有可用的 AI 配置。'
+  }
+})
 const statusLabel = computed(() => {
-  if (byokAvailable.value) return '你的 API'
-  if (systemConfigured.value) return '系统 AI'
+  if (effectiveAiState.value === 'USER_BYOK') return '你的 API'
+  if (effectiveAiState.value === 'SYSTEM') return '系统 AI'
   return 'AI 尚未配置'
 })
-const currentAiDescription = computed(() => {
-  if (byokAvailable.value) return '你保存的 API 已启用，新任务会使用它。'
-  if (configured.value && storageAvailable.value) return '你的配置已保存但尚未启用；系统 AI 会继续用于新任务。'
-  if (systemConfigured.value) return '当前使用服务器配置的 AI，无需先配置自己的 API。'
-  return '当前没有可用的 AI 配置；你可以测试自己的 API，保存前需要服务端启用密钥存储。'
-})
+const nextStepDescription = computed(() => systemConfigured.value
+  ? '启用后，新任务会使用你的 API；不启用时仍使用系统 AI。'
+  : '启用后，新任务才能使用 AI；当前没有其它可用 AI。')
+const disableSuccessMessage = computed(() => systemConfigured.value
+  ? '已停用你的 API，新任务将使用系统 AI。'
+  : '已停用你的 API；当前没有可用 AI。')
+const deleteConfirmationMessage = computed(() => systemConfigured.value
+  ? '删除后，你保存的 API 密钥将被移除；新任务会使用系统 AI。是否确认删除？'
+  : '删除后，你保存的 API 密钥将被移除；在重新配置或启用 AI 前，新任务无法使用 AI 功能。是否确认删除？')
+const securityDescription = computed(() => systemConfigured.value
+  ? '停用后，新任务会使用系统 AI。'
+  : '停用后，当前将没有可用 AI。')
+const deleteDangerDescription = computed(() => systemConfigured.value
+  ? '删除后新任务会使用系统 AI；'
+  : '删除后当前将没有可用 AI；')
 
 const copySettingsToForm = (value: AiProviderCredential) => {
   form.baseUrl = value.baseUrl || ''
@@ -134,9 +165,7 @@ const handleToggle = async () => {
     settings.value = wasActive ? await disableAiProvider() : await enableAiProvider()
     savedNeedsEnable.value = false
     copySettingsToForm(settings.value)
-    ElMessage.success(
-      wasActive ? '已停用你的 API 密钥，新任务将使用系统提供的 AI' : '已启用你的 API 密钥',
-    )
+    ElMessage.success(wasActive ? disableSuccessMessage.value : '已启用你的 API 密钥')
   } catch (error) {
     actionError.value = error instanceof Error ? error.message : '更新状态失败'
     ElMessage.error(actionError.value)
@@ -149,7 +178,7 @@ const handleDelete = async () => {
   if (!configured.value || actionLoading.value) return
   try {
     await ElMessageBox.confirm(
-      '删除后，你保存的 API 密钥将被移除且无法恢复；新的岗位分析会使用系统提供的 AI。是否确认删除？',
+      deleteConfirmationMessage.value,
       '删除你的 API 密钥',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
     )
@@ -212,7 +241,7 @@ onMounted(load)
           <h2 id="current-ai-title">当前使用的 AI</h2>
           <p>{{ currentAiDescription }}</p>
         </div>
-        <div class="settings-current-ai-status" :class="{ 'is-active': byokAvailable, 'is-system': !byokAvailable && systemConfigured, 'is-unavailable': !byokAvailable && !systemConfigured }">
+        <div class="settings-current-ai-status" :class="{ 'is-active': effectiveAiState === 'USER_BYOK', 'is-system': effectiveAiState === 'SYSTEM', 'is-unavailable': effectiveAiState === 'UNAVAILABLE' }">
           <span class="settings-status-dot" aria-hidden="true" />
           <strong>{{ statusLabel }}</strong>
         </div>
@@ -220,7 +249,7 @@ onMounted(load)
 
       <div v-if="savedNeedsEnable && configured && storageAvailable && !active" class="settings-next-step" role="status">
         <strong>配置已保存，尚未启用</strong>
-        <span>如果要让新任务使用自己的 API，请启用它；否则系统 AI 会继续工作。</span>
+        <span>{{ nextStepDescription }}</span>
         <el-button type="primary" :loading="actionLoading" @click="handleToggle">启用</el-button>
       </div>
 
@@ -285,11 +314,11 @@ onMounted(load)
       <section v-if="configured && storageAvailable" class="settings-status-actions" aria-labelledby="status-actions-title">
         <div>
           <p class="settings-section-label">配置状态</p>
-          <h2 id="status-actions-title">{{ byokAvailable ? '自己的 API 已启用' : '自己的 API 尚未启用' }}</h2>
-          <p>{{ byokAvailable ? '新岗位分析会使用已保存的连接。' : '启用后，新岗位分析才会使用已保存的连接。' }}</p>
+          <h2 id="status-actions-title">{{ effectiveAiState === 'USER_BYOK' ? '自己的 API 已启用' : '自己的 API 尚未启用' }}</h2>
+          <p>{{ effectiveAiState === 'USER_BYOK' ? '新岗位分析会使用已保存的连接。' : '启用后，新岗位分析才会使用已保存的连接。' }}</p>
         </div>
-        <el-button :type="byokAvailable ? 'default' : 'primary'" :loading="actionLoading" @click="handleToggle">
-          {{ byokAvailable ? '停用' : '启用' }}
+        <el-button :type="effectiveAiState === 'USER_BYOK' ? 'default' : 'primary'" :loading="actionLoading" @click="handleToggle">
+          {{ effectiveAiState === 'USER_BYOK' ? '停用' : '启用' }}
         </el-button>
       </section>
 
@@ -302,14 +331,14 @@ onMounted(load)
         <p class="settings-section-label">安全说明</p>
         <h2 id="security-title">密钥只用于服务端连接</h2>
         <p>保存的密钥只显示为掩码，不会再次回显，也不会进入浏览器日志或页面存储。</p>
-        <p>停用自己的 API 后，新任务使用系统提供的 AI；历史任务不会被改写。</p>
+        <p>{{ securityDescription }}历史任务不会被改写。</p>
       </section>
 
       <section v-if="configured" class="settings-danger-zone">
         <div>
           <p class="settings-section-label">危险操作</p>
           <h2>删除密钥</h2>
-          <p>删除后新任务会使用系统提供的 AI；已保存的密钥无法恢复。</p>
+          <p>{{ deleteDangerDescription }}已保存的密钥无法恢复。</p>
         </div>
         <el-button type="danger" plain :loading="actionLoading" @click="handleDelete">删除</el-button>
       </section>

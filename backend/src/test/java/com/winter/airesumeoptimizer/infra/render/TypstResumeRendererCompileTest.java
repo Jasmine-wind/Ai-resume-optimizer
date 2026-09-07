@@ -19,8 +19,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 import org.apache.pdfbox.Loader;
@@ -28,6 +30,7 @@ import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -74,6 +77,24 @@ class TypstResumeRendererCompileTest {
             assertThat(document.getNumberOfPages()).isEqualTo(result.layout().pageCount());
             assertThat(document.getDocumentInformation().getTitle()).isEqualTo("张三 · 简历");
         }
+    }
+
+    @Test
+    void classicV5UsesEmbeddedRegularAndBoldCjkFonts() throws IOException {
+        assumeTrue(typstAvailable, "本机未安装 typst，跳过真实编译验证");
+
+        byte[] pdf = renderer().render(standardFixtureDocument(), ResumeTemplateId.CLASSIC).pdf();
+        Set<String> names = embeddedFontNames(pdf);
+        Set<String> cjkNames = names.stream()
+                .filter(name -> name.toLowerCase(Locale.ROOT).contains("notosanscjk"))
+                .collect(java.util.stream.Collectors.toSet());
+
+        assertThat(cjkNames).isNotEmpty();
+        assertThat(cjkNames).anyMatch(name -> name.toLowerCase(Locale.ROOT).contains("bold"));
+        assertThat(cjkNames).anyMatch(name -> name.toLowerCase(Locale.ROOT).contains("regular")
+                || !name.toLowerCase(Locale.ROOT).contains("bold"));
+        assertThat(cjkNames).allSatisfy(name -> assertThat(name.toLowerCase(Locale.ROOT))
+                .doesNotContain("thin", "extralight", "light"));
     }
 
     @ParameterizedTest
@@ -516,14 +537,25 @@ class TypstResumeRendererCompileTest {
         }
     }
 
-    private void assertNoThinFonts(byte[] pdf) throws IOException {
+    private Set<String> embeddedFontNames(byte[] pdf) throws IOException {
+        Set<String> names = new HashSet<>();
         try (PDDocument document = Loader.loadPDF(pdf)) {
             for (PDPage page : document.getPages()) {
                 for (COSName fontName : page.getResources().getFontNames()) {
-                    assertThat(page.getResources().getFont(fontName).getName())
-                            .doesNotContainIgnoringCase("thin");
+                    PDFont font = page.getResources().getFont(fontName);
+                    names.add(font.getName());
+                    if (font.getFontDescriptor() != null) {
+                        names.add(font.getFontDescriptor().getFontName());
+                    }
                 }
             }
+        }
+        return names;
+    }
+
+    private void assertNoThinFonts(byte[] pdf) throws IOException {
+        for (String name : embeddedFontNames(pdf)) {
+            assertThat(name).doesNotContainIgnoringCase("thin", "extralight", "light");
         }
     }
 

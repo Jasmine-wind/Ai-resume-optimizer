@@ -33,6 +33,8 @@ const mockAuthenticatedShell = async (page: Page) => {
         configured: false,
         apiKeyConfigured: false,
         maskedApiKey: '',
+        credentialStorageAvailable: true,
+        systemProviderConfigured: true,
       }),
     ),
   )

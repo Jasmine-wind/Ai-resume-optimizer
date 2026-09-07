@@ -14,7 +14,12 @@ const result = (data: unknown) => ({
   body: JSON.stringify({ code: 200, message: 'success', data }),
 })
 
-const credential = (status: 'ACTIVE' | 'DISABLED', configured = true) => ({
+const credential = (
+  status: 'ACTIVE' | 'DISABLED',
+  configured: boolean,
+  credentialStorageAvailable: boolean,
+  systemProviderConfigured: boolean,
+) => ({
   providerType: 'OPENAI_COMPATIBLE',
   baseUrl: 'https://api.example.com/v1',
   model: 'polish-model',
@@ -23,6 +28,8 @@ const credential = (status: 'ACTIVE' | 'DISABLED', configured = true) => ({
   configured,
   apiKeyConfigured: configured,
   maskedApiKey: configured ? 'sk-••••••' : '',
+  credentialStorageAvailable,
+  systemProviderConfigured,
 })
 
 const installUser = async (page: Page) => {
@@ -180,16 +187,25 @@ test.describe('AI settings', () => {
   })
 
   test('keeps the system AI as the default when no personal API is configured', async ({ page }) => {
-    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false))))
+    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false, true, true))))
     await page.goto('/settings/ai-provider')
     await expect(page.getByRole('heading', { name: '当前使用的 AI' })).toBeVisible()
     await expect(page.getByText('系统 AI', { exact: true })).toBeVisible()
-    await expect(page.getByText('当前使用服务器配置的 AI，无需先配置自己的 API。')).toBeVisible()
+    await expect(page.getByText('当前使用服务器配置的 AI，无需配置自己的 API。')).toBeVisible()
+  })
+
+  test('shows unavailable when BYOK is inactive and the system provider is not configured', async ({ page }) => {
+    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false, true, false))))
+    await page.goto('/settings/ai-provider')
+    await expect(page.getByText('AI 尚未配置', { exact: true })).toBeVisible()
+    await expect(page.getByText('当前没有可用的 AI 配置。', { exact: true })).toBeVisible()
+    await expect(page.getByText('系统 AI', { exact: true })).toHaveCount(0)
+    await expect(page.getByText(/系统 AI 会继续工作|新任务将使用系统 AI/)).toHaveCount(0)
   })
 
   test('keeps test available but disables save when secure storage is unavailable', async ({ page }) => {
     await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result({
-      ...credential('DISABLED', false),
+      ...credential('DISABLED', false, false, false),
       credentialStorageAvailable: false,
       systemProviderConfigured: false,
     })))
@@ -204,12 +220,12 @@ test.describe('AI settings', () => {
   })
 
   test('keeps the key after test, then clears it only after save and exposes the enable step', async ({ page }) => {
-    let current = credential('DISABLED')
+    let current = credential('DISABLED', true, true, true)
     await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(current)))
     await page.route('**/api/settings/ai-provider/test', (route) => route.fulfill(result({ success: true, message: '连接正常' })))
     await page.route('**/api/settings/ai-provider', async (route) => {
       if (route.request().method() === 'PUT') {
-        current = credential('DISABLED')
+        current = credential('DISABLED', true, true, true)
         await route.fulfill(result(current))
       } else {
         await route.fulfill(result(current))
@@ -223,13 +239,14 @@ test.describe('AI settings', () => {
     await expect(page.getByLabel('API 密钥')).toHaveValue('secret-key')
     await page.getByRole('button', { name: /保存/ }).click()
     await expect(page.getByText('配置已保存，尚未启用')).toBeVisible()
+    await expect(page.getByText('启用后，新任务会使用你的 API；不启用时仍使用系统 AI。')).toBeVisible()
     await expect(page.getByLabel('API 密钥')).toHaveValue('')
     await expect(page.getByRole('button', { name: '启用' }).first()).toBeVisible()
   })
 
   test('keeps the settings sequence single-column on a narrow viewport', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED'))))
+    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', true, true, true))))
     await page.goto('/settings/ai-provider')
     const layout = await page.evaluate(() => ({
       documentWidth: document.documentElement.scrollWidth,
@@ -239,7 +256,7 @@ test.describe('AI settings', () => {
   })
 
   test('keeps test and save failures in the page for a recoverable retry', async ({ page }) => {
-    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false))))
+    await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false, true, true))))
     await page.route('**/api/settings/ai-provider/test', (route) => route.fulfill(result({ success: false, message: '连接没有通过' })))
     await page.route('**/api/settings/ai-provider', async (route) => {
       if (route.request().method() === 'PUT') {
@@ -250,7 +267,7 @@ test.describe('AI settings', () => {
         })
         return
       }
-      await route.fulfill(result(credential('DISABLED', false)))
+      await route.fulfill(result(credential('DISABLED', false, true, true)))
     })
     await page.goto('/settings/ai-provider')
     await page.getByLabel('连接地址').fill('https://api.example.com/v1')
@@ -265,9 +282,9 @@ test.describe('AI settings', () => {
   })
 
   test('confirms deletion and returns to the system AI state', async ({ page }) => {
-    let current = credential('DISABLED')
+    let current = credential('DISABLED', true, true, true)
     await page.route('**/api/settings/ai-provider**', async (route) => {
-      if (route.request().method() === 'DELETE') current = credential('DISABLED', false)
+      if (route.request().method() === 'DELETE') current = credential('DISABLED', false, true, true)
       await route.fulfill(result(current))
     })
     await page.goto('/settings/ai-provider')
@@ -275,14 +292,14 @@ test.describe('AI settings', () => {
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click()
     await expect(page.getByText('已删除你的 API 密钥')).toBeVisible()
-    await expect(page.getByText('当前使用服务器配置的 AI，无需先配置自己的 API。')).toBeVisible()
+    await expect(page.getByText('当前使用服务器配置的 AI，无需配置自己的 API。')).toBeVisible()
   })
 
   test('shows active and disable state without mixing it into form actions', async ({ page }) => {
-    let current = credential('ACTIVE')
+    let current = credential('ACTIVE', true, true, true)
     await page.route('**/api/settings/ai-provider**', async (route) => {
       if (route.request().method() === 'POST' && route.request().url().endsWith('/disable')) {
-        current = credential('DISABLED')
+        current = credential('DISABLED', true, true, true)
       }
       await route.fulfill(result(current))
     })

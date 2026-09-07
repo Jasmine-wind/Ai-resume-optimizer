@@ -45,7 +45,7 @@ async function registerAndLogin(page: Page) {
   await page.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(page.getByText('配置已保存，尚未启用', { exact: true })).toBeVisible()
   await page.getByLabel('你的 API 已保存，尚未启用').getByRole('button', { name: '启用', exact: true }).click()
-  await expect(page.getByText('你的 API 已启用', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('当前状态').getByText('你的 API 已启用', { exact: true })).toBeVisible()
   await page.goto('/app')
 }
 

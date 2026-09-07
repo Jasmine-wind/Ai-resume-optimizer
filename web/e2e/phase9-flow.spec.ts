@@ -41,7 +41,7 @@ async function registerAndLogin(page: Page) {
   await page.getByLabel('API 密钥').fill('phase9-user-key')
   await page.getByLabel('模型').fill('phase9-fake')
   await page.getByRole('button', { name: '测试连接', exact: true }).click()
-  await expect(page.getByText('连接测试成功', { exact: true })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByLabel('使用自己的 API').getByText('连接测试成功', { exact: true })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(page.getByText('配置已保存，尚未启用', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '启用', exact: true }).click()

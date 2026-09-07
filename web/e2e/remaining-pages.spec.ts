@@ -197,8 +197,7 @@ test.describe('AI settings', () => {
   test('shows the saved-disabled BYOK state', async ({ page }) => {
     await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', true, true, false))))
     await page.goto('/settings/ai-provider')
-    await expect(page.getByText('AI 尚未配置', { exact: true })).toBeVisible()
-    await expect(page.getByText('API 已保存，尚未启用', { exact: true })).toBeVisible()
+    await expect(page.getByText('你的 API 已保存，尚未启用', { exact: true })).toBeVisible()
     await expect(page.getByText('系统 AI', { exact: true })).toHaveCount(0)
   })
 

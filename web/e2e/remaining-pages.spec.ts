@@ -303,7 +303,7 @@ test.describe('AI settings', () => {
     await page.goto('/settings/ai-provider')
     await expect(page.getByLabel('当前状态').getByText('你的 API 已启用', { exact: true })).toBeVisible()
     await page.getByLabel('你的 API 已启用').getByRole('button', { name: '停用', exact: true }).click()
-    await expect(page.getByLabel('当前状态').getByText('你的 API 已保存，尚未启用', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('当前状态').getByText('API 已保存，尚未启用', { exact: true })).toBeVisible()
   })
 })
 

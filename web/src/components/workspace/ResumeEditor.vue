@@ -61,9 +61,7 @@ const compactContactRows = (contacts: ResumeDocumentBasics['contacts']) => {
   })
 }
 
-const visibleContacts = computed(() =>
-  compactContactRows(props.document.basics.contacts ?? []),
-)
+const visibleContacts = computed(() => compactContactRows(props.document.basics.contacts ?? []))
 
 const SECTION_REORDER_HOLD_DELAY_MS = 220
 const SECTION_REORDER_MOVE_THRESHOLD = 6
@@ -142,15 +140,14 @@ const syncSelectedSection = async () => {
   // object. Autosave replacements therefore cannot re-scroll or steal focus.
   await nextTick()
   const bullet = props.focusedBulletId
-    ? editorRoot.value?.querySelector<HTMLElement>(
-        `[data-bullet-id="${props.focusedBulletId}"]`,
-      )
+    ? editorRoot.value?.querySelector<HTMLElement>(`[data-bullet-id="${props.focusedBulletId}"]`)
     : null
   const target = bullet ?? (selectedSection ? sectionElements.get(selectedSection.id) : null)
   if (!target) return
   const scrollContainer = target.closest<HTMLElement>('.resume-stage-scroll')
   if (scrollContainer) {
-    const targetTop = target.getBoundingClientRect().top - scrollContainer.getBoundingClientRect().top
+    const targetTop =
+      target.getBoundingClientRect().top - scrollContainer.getBoundingClientRect().top
     const targetOffset = bullet
       ? Math.max(24, (scrollContainer.clientHeight - target.clientHeight) / 2)
       : 24
@@ -202,18 +199,23 @@ const finishEntryEdit = () => {
   editingEntryKey.value = null
 }
 
+const isStructuredSection = (kind: string) =>
+  ['EXPERIENCE', 'PROJECT', 'EDUCATION', 'SKILL'].includes(kind)
+
 const entryTitle = (entry: ResumeDocumentEntry, kind: string) => {
   if (kind === 'EDUCATION') return entry.school || entry.degree || '教育经历'
-  return entry.organization || entry.role || (kind === 'SKILL' ? entry.group : '经历条目') || '经历条目'
+  if (kind === 'SKILL') return entry.group || '技能组'
+  if (kind === 'PROJECT') return entry.organization || entry.role || '项目经历'
+  if (kind === 'EXPERIENCE') return entry.organization || entry.role || '工作经历'
+  return '内容'
 }
 
 const entryMeta = (entry: ResumeDocumentEntry, kind: string) => {
-  const values = kind === 'EDUCATION'
-    ? [entry.degree, entry.major]
-    : [entry.role, entry.location]
-  const dates = entry.startDate && entry.endDate
-    ? `${entry.startDate} — ${entry.endDate}`
-    : entry.startDate || entry.endDate
+  const values = kind === 'EDUCATION' ? [entry.degree, entry.major] : [entry.role, entry.location]
+  const dates =
+    entry.startDate && entry.endDate
+      ? `${entry.startDate} — ${entry.endDate}`
+      : entry.startDate || entry.endDate
   return [...values, dates].filter((value): value is string => Boolean(value?.trim())).join(' · ')
 }
 
@@ -263,10 +265,13 @@ const moveSection = (index: number, delta: number) => {
 }
 
 const isInteractiveReorderTarget = (target: EventTarget | null) => {
-  return target instanceof Element && Boolean(
-    target.closest(
-      'input, textarea, button, a, select, summary, .el-input, .el-input__wrapper, .el-textarea, [role="textbox"], [contenteditable="true"], [contenteditable=""], [role="button"]',
-    ),
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        'input, textarea, button, a, select, summary, .el-input, .el-input__wrapper, .el-textarea, [role="textbox"], [contenteditable="true"], [contenteditable=""], [role="button"]',
+      ),
+    )
   )
 }
 
@@ -336,11 +341,12 @@ const updateAutoScroll = (clientY: number) => {
       return
     }
     const currentRect = currentContainer.getBoundingClientRect()
-    const currentDirection = current.clientY < currentRect.top + edge
-      ? -1
-      : current.clientY > currentRect.bottom - edge
-        ? 1
-        : 0
+    const currentDirection =
+      current.clientY < currentRect.top + edge
+        ? -1
+        : current.clientY > currentRect.bottom - edge
+          ? 1
+          : 0
     if (currentDirection === 0) {
       autoScrollFrame = null
       return
@@ -357,7 +363,8 @@ const handleSectionPointerDown = (sectionId: string, event: PointerEvent) => {
     (event.pointerType && event.pointerType !== 'mouse') ||
     (event.button !== undefined && event.button !== 0) ||
     isInteractiveReorderTarget(event.target)
-  ) return
+  )
+    return
   clearSectionReorder()
   const intent: SectionReorderIntent = {
     sectionId,
@@ -371,7 +378,12 @@ const handleSectionPointerDown = (sectionId: string, event: PointerEvent) => {
   }
   intent.timer = window.setTimeout(() => {
     const current = sectionReorderIntent.value
-    if (!current || Math.hypot(current.clientX - current.startX, current.clientY - current.startY) > SECTION_REORDER_MOVE_THRESHOLD) return
+    if (
+      !current ||
+      Math.hypot(current.clientX - current.startX, current.clientY - current.startY) >
+        SECTION_REORDER_MOVE_THRESHOLD
+    )
+      return
     current.active = true
     draggedSectionId.value = current.sectionId
     setDropTarget(current.clientY)
@@ -385,7 +397,10 @@ const handleSectionPointerMove = (event: PointerEvent) => {
   intent.clientX = event.clientX
   intent.clientY = event.clientY
   if (!intent.active) {
-    if (Math.hypot(intent.clientX - intent.startX, intent.clientY - intent.startY) > SECTION_REORDER_MOVE_THRESHOLD) {
+    if (
+      Math.hypot(intent.clientX - intent.startX, intent.clientY - intent.startY) >
+      SECTION_REORDER_MOVE_THRESHOLD
+    ) {
       clearSectionReorder()
     }
     return
@@ -411,7 +426,13 @@ const finishSectionReorder = () => {
   const targetIndex = props.document.sections.findIndex((candidate) => candidate.id === targetId)
   const targetIndexAfterRemoval = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
   const nextIndex = insertBefore ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1
-  if (!source || sourceId === targetId || sourceIndex < 0 || targetIndex < 0 || nextIndex === sourceIndex) {
+  if (
+    !source ||
+    sourceId === targetId ||
+    sourceIndex < 0 ||
+    targetIndex < 0 ||
+    nextIndex === sourceIndex
+  ) {
     clearSectionReorder()
     return
   }
@@ -425,17 +446,23 @@ const finishSectionReorder = () => {
 }
 
 const handleSectionKeydown = (sectionId: string, index: number, event: KeyboardEvent) => {
-  if (event.target !== event.currentTarget || !event.altKey || event.ctrlKey || event.metaKey) return
+  if (event.target !== event.currentTarget || !event.altKey || event.ctrlKey || event.metaKey)
+    return
   const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0
   if (delta === 0 || index + delta < 0 || index + delta >= props.document.sections.length) return
   event.preventDefault()
   const section = props.document.sections.find((candidate) => candidate.id === sectionId)
   moveSection(index, delta)
-  if (section) reorderAnnouncement.value = `已将${sectionTitle(section)}移动到第 ${index + delta + 1} 项`
+  if (section)
+    reorderAnnouncement.value = `已将${sectionTitle(section)}移动到第 ${index + delta + 1} 项`
 }
 
 const handleBasicsOutsidePointerDown = (event: PointerEvent) => {
-  if (basicsDetails.value?.open && event.target instanceof Node && !basicsDetails.value.contains(event.target)) {
+  if (
+    basicsDetails.value?.open &&
+    event.target instanceof Node &&
+    !basicsDetails.value.contains(event.target)
+  ) {
     basicsDetails.value.open = false
   }
 }
@@ -508,7 +535,8 @@ const addEntry = (sectionId: string) => {
     return
   }
   const entryId = newId()
-  editingEntryKey.value = entryKey(sectionId, entryId)
+  const structured = isStructuredSection(section.kind)
+  editingEntryKey.value = structured ? entryKey(sectionId, entryId) : null
   updateSection(sectionId, (target) => {
     target.entries.push({
       id: entryId,
@@ -522,10 +550,12 @@ const addEntry = (sectionId: string) => {
       location: null,
       group: null,
       skillItems: section.kind === 'SKILL' ? [] : null,
-      bullets: [],
+      bullets: structured ? [] : [{ id: newId(), text: '' }],
     })
   })
-  void focusEditorElement(`[data-entry-id="${entryId}"] input, [data-entry-id="${entryId}"] textarea`)
+  void focusEditorElement(
+    `[data-entry-id="${entryId}"] input, [data-entry-id="${entryId}"] textarea`,
+  )
 }
 
 const addBullet = (sectionId: string, entryId: string) => {
@@ -675,594 +705,656 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 <template>
   <div ref="editorRoot" class="resume-editor">
     <div class="resume-paper">
-    <section class="editor-block editor-basics">
-      <header class="editor-block-header editor-basics-header">
-        <div class="resume-identity">
-          <template v-if="editingName">
-            <el-input
-              class="identity-name-input"
-              :model-value="document.basics.name ?? ''"
-              :maxlength="LIMITS.name"
-              placeholder="你的姓名"
-              aria-label="姓名"
-              autofocus
-              @update:model-value="(value: string) => updateBasics((basics) => (basics.name = value))"
-              @blur="finishNameEdit"
-              @keyup.enter="finishNameEdit"
-              @keyup.esc="finishNameEdit"
-            />
-          </template>
-          <button
-            v-else
-            type="button"
-            class="identity-name"
-            aria-label="编辑姓名"
-            @click="editingName = true"
-          >
-            {{ document.basics.name || '未命名简历' }}
-          </button>
-          <p v-if="document.basics.jobIntention" class="identity-target">{{ document.basics.jobIntention }}</p>
-        </div>
-        <details ref="basicsDetails" class="basics-details">
-          <summary aria-label="编辑补充信息">补充信息</summary>
-          <div class="basics-details-menu">
-            <label>
-              <span>求职意向</span>
+      <section class="editor-block editor-basics">
+        <header class="editor-block-header editor-basics-header">
+          <div class="resume-identity">
+            <template v-if="editingName">
               <el-input
-                :model-value="document.basics.jobIntention ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="例如 Java 后端工程师"
+                class="identity-name-input"
+                :model-value="document.basics.name ?? ''"
+                :maxlength="LIMITS.name"
+                placeholder="你的姓名"
+                aria-label="姓名"
+                autofocus
                 @update:model-value="
-                  (value: string) => updateBasics((basics) => (basics.jobIntention = value))
+                  (value: string) => updateBasics((basics) => (basics.name = value))
                 "
+                @blur="finishNameEdit"
+                @keyup.enter="finishNameEdit"
+                @keyup.esc="finishNameEdit"
               />
-            </label>
-            <label>
-              <span>最高学历</span>
-              <el-input
-                :model-value="document.basics.highestEducation ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="例如 本科"
-                @update:model-value="
-                  (value: string) => updateBasics((basics) => (basics.highestEducation = value))
-                "
-              />
-            </label>
-          </div>
-        </details>
-      </header>
-      <div class="basics-document">
-        <div class="contact-line" aria-label="联系方式">
-          <template v-for="(contact, index) in visibleContacts" :key="contact.id">
-            <div class="contact-item">
-              <span v-if="index > 0" class="contact-divider" aria-hidden="true">·</span>
-              <div v-if="editingContactId === contact.id" class="contact-inline-editor" @keydown.esc="finishContactEdit">
-                <select
-                  class="contact-type"
-                  :value="contact.type || 'OTHER'"
-                  :aria-label="`联系方式类型 · ${contact.value || '未填写'}`"
-                  @change="
-                    (event: Event) =>
-                      setContactType(contact.id, (event.target as HTMLSelectElement).value)
-                  "
-                >
-                  <option v-for="option in RESUME_CONTACT_TYPE_OPTIONS" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                  </option>
-                </select>
-                <el-input
-                  :model-value="contact.value"
-                  :maxlength="LIMITS.contact"
-                  :placeholder="getResumeContactPlaceholder(contact.type)"
-                  :aria-label="`${getResumeContactTypeLabel(contact.type)}内容`"
-                  @update:model-value="
-                    (value: string) =>
-                      updateBasics((basics) => {
-                        const target = basics.contacts.find((item) => item.id === contact.id)
-                        if (target) target.value = value
-                      })
-                  "
-                />
-                <button type="button" class="inline-done" @click="finishContactEdit">完成</button>
-                <button type="button" class="inline-delete" @click="deleteContact(contact.id)">删除</button>
-              </div>
-              <button
-                v-else
-                type="button"
-                class="contact-token"
-                :class="{ 'is-empty': !contact.value?.trim() }"
-                :aria-label="`编辑${getResumeContactTypeLabel(contact.type)}`"
-                @click="beginContactEdit(contact.id)"
-              >
-                {{ contact.value || `添加${getResumeContactTypeLabel(contact.type)}` }}
-              </button>
-            </div>
-          </template>
-          <button type="button" class="contact-add" @click="addContact">+ 联系方式</button>
-        </div>
-      </div>
-    </section>
-
-    <section
-      v-for="(section, sectionIndex) in document.sections"
-      :key="section.id"
-      class="editor-block editor-section"
-      :data-section-id="section.id"
-      :class="{
-        'is-collapsed': !isSectionExpanded(section.id),
-        'is-focused': props.selectedSectionId === section.id,
-        'has-focused-bullet': Boolean(
-          props.focusedBulletId && section.entries.some((entry) => entry.bullets.some((bullet) => bullet.id === props.focusedBulletId)),
-        ),
-        'is-empty': section.entries.length === 0,
-        'is-reorder-source': draggedSectionId === section.id,
-        'is-drop-before': dropSectionId === section.id && dropBefore,
-        'is-drop-after': dropSectionId === section.id && !dropBefore,
-      }"
-      :ref="(element) => setSectionRef(section.id, element)"
-      role="group"
-      tabindex="0"
-      :aria-label="`${sectionTitle(section)}，第 ${sectionIndex + 1} 项`"
-      aria-describedby="resume-reorder-help"
-      aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-      @pointerdown="handleSectionPointerDown(section.id, $event)"
-      @pointerup="finishSectionReorder"
-      @pointercancel="clearSectionReorder"
-      @keydown="handleSectionKeydown(section.id, sectionIndex, $event)"
-    >
-      <header class="editor-block-header">
-        <button
-          type="button"
-          class="section-collapse-toggle"
-          :aria-expanded="isSectionExpanded(section.id)"
-          :aria-controls="`editor-section-${section.id}`"
-          :aria-label="`${isSectionExpanded(section.id) ? '收起' : '展开'}${sectionTitle(section)}`"
-          @click="toggleSection(section.id)"
-        >
-          <span class="section-collapse-icon" aria-hidden="true" />
-        </button>
-        <div class="section-heading">
-          <template v-if="editingSectionTitle === section.id">
-            <el-input
-              class="section-title-input"
-              :model-value="section.title"
-              :maxlength="LIMITS.sectionTitle"
-              aria-label="章节标题"
-              @update:model-value="
-                (value: string) => updateSection(section.id, (target) => (target.title = value))
-              "
-              @blur="finishSectionTitleEdit"
-              @keyup.enter="finishSectionTitleEdit"
-              @keyup.esc="finishSectionTitleEdit"
-            />
-          </template>
-          <button
-            v-else
-            type="button"
-            class="section-title-display"
-            :aria-label="`编辑${sectionTitle(section)}标题`"
-            @click="beginSectionTitleEdit(section.id)"
-          >
-            {{ sectionTitle(section) }}
-          </button>
-        </div>
-      </header>
-
-      <div v-if="isSectionExpanded(section.id)" :id="`editor-section-${section.id}`" class="editor-section-content">
-      <p v-if="section.entries.length === 0" class="editor-empty">
-        该章节暂时没有内容，可以添加{{ sectionEntryLabel(section.kind) }}。
-      </p>
-
-      <article
-        v-for="entry in section.entries"
-        :key="entry.id"
-        class="editor-entry"
-        :data-entry-id="entry.id"
-      >
-        <div class="entry-document-heading">
-          <template v-if="isEntryEditing(section.id, entry.id)">
-            <div v-if="section.kind === 'SKILL'" class="entry-inline-editor" @keydown.esc="finishEntryEdit" @keydown.enter.prevent="finishEntryEdit">
-              <el-input
-                :model-value="entry.group ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="技能分组"
-                aria-label="技能分组"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.group = value))
-                "
-              />
-              <el-input
-                :model-value="skillItemsText(entry)"
-                :maxlength="LIMITS.bullet"
-                placeholder="技能项，用顿号分隔"
-                aria-label="技能项"
-                @update:model-value="(value: string) => setSkillItemsText(section.id, entry.id, value)"
-              />
-              <button type="button" class="inline-done" @click="finishEntryEdit">完成</button>
-            </div>
-            <div v-else-if="section.kind === 'EDUCATION'" class="entry-inline-editor entry-inline-editor-grid" @keydown.esc="finishEntryEdit" @keydown.enter.prevent="finishEntryEdit">
-              <el-input
-                :model-value="entry.school ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="学校"
-                aria-label="学校"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.school = value))
-                "
-              />
-              <el-input
-                :model-value="entry.degree ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="学历"
-                aria-label="学历"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.degree = value))
-                "
-              />
-              <el-input
-                :model-value="entry.major ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="专业"
-                aria-label="专业"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.major = value))
-                "
-              />
-              <el-input
-                :model-value="entry.startDate ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="开始时间"
-                aria-label="开始时间"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.startDate = value))
-                "
-              />
-              <el-input
-                :model-value="entry.endDate ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="结束时间"
-                aria-label="结束时间"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.endDate = value))
-                "
-              />
-              <button type="button" class="inline-done" @click="finishEntryEdit">完成</button>
-            </div>
-            <div v-else class="entry-inline-editor entry-inline-editor-grid" @keydown.esc="finishEntryEdit" @keydown.enter.prevent="finishEntryEdit">
-              <el-input
-                :model-value="entry.organization ?? ''"
-                :maxlength="LIMITS.entryField"
-                :placeholder="section.kind === 'PROJECT' ? '项目名' : '公司'"
-                :aria-label="section.kind === 'PROJECT' ? '项目名' : '公司'"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.organization = value))
-                "
-              />
-              <el-input
-                :model-value="entry.role ?? ''"
-                :maxlength="LIMITS.entryField"
-                :placeholder="section.kind === 'PROJECT' ? '角色' : '职位'"
-                :aria-label="section.kind === 'PROJECT' ? '角色' : '职位'"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.role = value))
-                "
-              />
-              <el-input
-                :model-value="entry.startDate ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="开始时间"
-                aria-label="开始时间"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.startDate = value))
-                "
-              />
-              <el-input
-                :model-value="entry.endDate ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="结束时间"
-                aria-label="结束时间"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.endDate = value))
-                "
-              />
-              <el-input
-                :model-value="entry.location ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="地点（可选）"
-                aria-label="地点"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.location = value))
-                "
-              />
-              <button type="button" class="inline-done" @click="finishEntryEdit">完成</button>
-            </div>
-          </template>
-          <template v-else-if="section.kind === 'SKILL'">
-            <button type="button" class="entry-title-display" @click="beginEntryEdit(section.id, entry.id)">
-              {{ entryTitle(entry, section.kind) }}
-            </button>
+            </template>
             <button
-              v-if="skillItemsText(entry)"
+              v-else
               type="button"
-              class="entry-meta-display"
-              @click="beginEntryEdit(section.id, entry.id)"
+              class="identity-name"
+              aria-label="编辑姓名"
+              @click="editingName = true"
             >
-              {{ skillItemsText(entry) }}
+              {{ document.basics.name || '未命名简历' }}
             </button>
-          </template>
-          <template v-else>
-            <button type="button" class="entry-title-display" @click="beginEntryEdit(section.id, entry.id)">
-              {{ entryTitle(entry, section.kind) }}
-            </button>
-            <button
-              v-if="entryMeta(entry, section.kind)"
-              type="button"
-              class="entry-meta-display"
-              @click="beginEntryEdit(section.id, entry.id)"
-            >
-              {{ entryMeta(entry, section.kind) }}
-            </button>
-          </template>
-          <button
-            v-if="!isEntryEditing(section.id, entry.id)"
-            type="button"
-            class="entry-delete-action"
-            :aria-label="`删除条目：${entryTitle(entry, section.kind)}`"
-            @click="confirmDeleteEntry(section.id, entry.id, section.kind)"
-          >
-            删除条目
-          </button>
-        </div>
-        <template v-if="section.kind === 'SKILL'">
-          <div class="skill-grid">
-            <label class="editor-field">
-              <span>技能分组</span>
-              <el-input
-                :model-value="entry.group ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="例如 后端技术"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.group = value))
-                "
-              />
-            </label>
-            <label class="editor-field">
-              <span>技能项</span>
-              <el-input
-                :model-value="skillItemsText(entry)"
-                :maxlength="LIMITS.bullet"
-                placeholder="用顿号分隔，例如 Java、Spring Boot"
-                @update:model-value="
-                  (value: string) => setSkillItemsText(section.id, entry.id, value)
-                "
-              />
-            </label>
+            <p v-if="document.basics.jobIntention" class="identity-target">
+              {{ document.basics.jobIntention }}
+            </p>
           </div>
-        </template>
-
-        <template v-else-if="section.kind === 'EDUCATION'">
-          <div class="entry-grid">
-            <label class="editor-field">
-              <span>学校</span>
-              <el-input
-                :model-value="entry.school ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="学校名称"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.school = value))
-                "
-              />
-            </label>
-            <label class="editor-field">
-              <span>学历</span>
-              <el-input
-                :model-value="entry.degree ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="例如 本科"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.degree = value))
-                "
-              />
-            </label>
-            <label class="editor-field">
-              <span>专业</span>
-              <el-input
-                :model-value="entry.major ?? ''"
-                :maxlength="LIMITS.entryField"
-                placeholder="专业名称"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.major = value))
-                "
-              />
-            </label>
-            <div class="date-grid">
-              <label class="editor-field">
-                <span>开始时间</span>
+          <details ref="basicsDetails" class="basics-details">
+            <summary aria-label="编辑补充信息">补充信息</summary>
+            <div class="basics-details-menu">
+              <label>
+                <span>求职意向</span>
                 <el-input
-                  :model-value="entry.startDate ?? ''"
+                  :model-value="document.basics.jobIntention ?? ''"
                   :maxlength="LIMITS.entryField"
-                  placeholder="例如 2018.09"
+                  placeholder="例如 Java 后端工程师"
                   @update:model-value="
-                    (value: string) =>
-                      updateEntry(section.id, entry.id, (target) => (target.startDate = value))
+                    (value: string) => updateBasics((basics) => (basics.jobIntention = value))
                   "
                 />
               </label>
-              <label class="editor-field">
-                <span>结束时间</span>
+              <label>
+                <span>最高学历</span>
                 <el-input
-                  :model-value="entry.endDate ?? ''"
+                  :model-value="document.basics.highestEducation ?? ''"
                   :maxlength="LIMITS.entryField"
-                  placeholder="例如 2022.06"
+                  placeholder="例如 本科"
                   @update:model-value="
-                    (value: string) =>
-                      updateEntry(section.id, entry.id, (target) => (target.endDate = value))
+                    (value: string) => updateBasics((basics) => (basics.highestEducation = value))
                   "
                 />
               </label>
             </div>
-          </div>
-        </template>
-
-        <template v-else-if="section.kind === 'EXPERIENCE' || section.kind === 'PROJECT'">
-          <div class="entry-grid">
-            <label class="editor-field">
-              <span>{{ section.kind === 'PROJECT' ? '项目名' : '公司' }}</span>
-              <el-input
-                :model-value="entry.organization ?? ''"
-                :maxlength="LIMITS.entryField"
-                :placeholder="section.kind === 'PROJECT' ? '项目名称' : '公司名称'"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.organization = value))
-                "
-              />
-            </label>
-            <label class="editor-field">
-              <span>{{ section.kind === 'PROJECT' ? '角色' : '职位' }}</span>
-              <el-input
-                :model-value="entry.role ?? ''"
-                :maxlength="LIMITS.entryField"
-                :placeholder="section.kind === 'PROJECT' ? '项目角色（可选）' : '职位名称'"
-                @update:model-value="
-                  (value: string) =>
-                    updateEntry(section.id, entry.id, (target) => (target.role = value))
-                "
-              />
-            </label>
-            <div class="date-grid">
-              <label class="editor-field">
-                <span>开始时间</span>
-                <el-input
-                  :model-value="entry.startDate ?? ''"
-                  :maxlength="LIMITS.entryField"
-                  placeholder="例如 2022.07"
-                  @update:model-value="
-                    (value: string) =>
-                      updateEntry(section.id, entry.id, (target) => (target.startDate = value))
-                  "
-                />
-              </label>
-              <label class="editor-field">
-                <span>结束时间</span>
-                <el-input
-                  :model-value="entry.endDate ?? ''"
-                  :maxlength="LIMITS.entryField"
-                  placeholder="例如 至今"
-                  @update:model-value="
-                    (value: string) =>
-                      updateEntry(section.id, entry.id, (target) => (target.endDate = value))
-                  "
-                />
-              </label>
-            </div>
-          </div>
-        </template>
-
-        <div v-if="section.kind !== 'SKILL'" class="entry-bullets-label">
-          {{ entryContentLabel(section.kind) }}
-        </div>
-        <template v-if="section.kind !== 'SKILL'">
-          <div
-            v-for="(bullet, bulletIndex) in entry.bullets"
-            :key="bullet.id"
-            class="bullet-block"
-            :class="{
-              'is-evidence-focus': props.focusedBulletId === bullet.id,
-              'is-suggest-active': suggestActive(bullet.id),
-            }"
-            :data-bullet-id="bullet.id"
-          >
-            <div class="bullet-line">
-              <label class="bullet-field">
-                <span class="sr-only">{{ entryContentLabel(section.kind) }}</span>
-                <el-input
-                  type="textarea"
-                  :autosize="{ minRows: 1, maxRows: 6 }"
-                  :model-value="bullet.text"
-                  :maxlength="LIMITS.bullet"
-                  :placeholder="bulletPlaceholder(section.kind)"
-                  @update:model-value="
-                    (value: string) =>
-                      updateEntry(section.id, entry.id, (target) => {
-                        const targetBullet = target.bullets.find((item) => item.id === bullet.id)
-                        if (targetBullet) targetBullet.text = value
-                      })
-                  "
-                />
-              </label>
-              <div class="bullet-actions">
-                <el-dropdown
-                  v-if="suggestEnabled && suggest"
-                  trigger="click"
-                  @command="
-                    (command: unknown) =>
-                      handleSuggestCommand(bullet.id, command as BulletSuggestIntent | 'CUSTOM')
-                  "
+          </details>
+        </header>
+        <div class="basics-document">
+          <div class="contact-line" aria-label="联系方式">
+            <template v-for="(contact, index) in visibleContacts" :key="contact.id">
+              <div class="contact-item">
+                <span v-if="index > 0" class="contact-divider" aria-hidden="true">·</span>
+                <div
+                  v-if="editingContactId === contact.id"
+                  class="contact-inline-editor"
+                  @keydown.esc="finishContactEdit"
                 >
-                  <el-button
-                    class="bullet-suggest-button"
-                    size="small"
-                    :disabled="
-                      suggest.busy.value || suggestActive(bullet.id) || !bullet.text.trim()
+                  <select
+                    class="contact-type"
+                    :value="contact.type || 'OTHER'"
+                    :aria-label="`联系方式类型 · ${contact.value || '未填写'}`"
+                    @change="
+                      (event: Event) =>
+                        setContactType(contact.id, (event.target as HTMLSelectElement).value)
                     "
                   >
-                    AI 优化
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item
-                        v-for="item in SUGGEST_INTENTS"
-                        :key="item.command"
-                        :command="item.command"
-                      >
-                        {{ item.label }}
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                    <option
+                      v-for="option in RESUME_CONTACT_TYPE_OPTIONS"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                  <el-input
+                    :model-value="contact.value"
+                    :maxlength="LIMITS.contact"
+                    :placeholder="getResumeContactPlaceholder(contact.type)"
+                    :aria-label="`${getResumeContactTypeLabel(contact.type)}内容`"
+                    @update:model-value="
+                      (value: string) =>
+                        updateBasics((basics) => {
+                          const target = basics.contacts.find((item) => item.id === contact.id)
+                          if (target) target.value = value
+                        })
+                    "
+                  />
+                  <button type="button" class="inline-done" @click="finishContactEdit">完成</button>
+                  <button type="button" class="inline-delete" @click="deleteContact(contact.id)">
+                    删除
+                  </button>
+                </div>
                 <button
+                  v-else
                   type="button"
-                  class="bullet-delete-action"
-                  :aria-label="bulletDeleteLabel(entry, section.kind, bulletIndex)"
-                  @click="deleteBullet(section.id, entry.id, bullet.id)"
+                  class="contact-token"
+                  :class="{ 'is-empty': !contact.value?.trim() }"
+                  :aria-label="`编辑${getResumeContactTypeLabel(contact.type)}`"
+                  @click="beginContactEdit(contact.id)"
                 >
-                  删除
+                  {{ contact.value || `添加${getResumeContactTypeLabel(contact.type)}` }}
                 </button>
               </div>
-            </div>
+            </template>
+            <button type="button" class="contact-add" @click="addContact">+ 联系方式</button>
           </div>
-        </template>
-
-        <div v-if="section.kind !== 'SKILL'" class="entry-actions">
-          <el-button size="small" @click="addBullet(section.id, entry.id)">
-            添加{{ entryContentLabel(section.kind) }}
-          </el-button>
         </div>
-      </article>
+      </section>
 
-      <div class="section-footer">
-        <el-button size="small" @click="addEntry(section.id)">{{
-          addEntryLabel(section.kind)
-        }}</el-button>
-      </div>
-      </div>
-    </section>
+      <section
+        v-for="(section, sectionIndex) in document.sections"
+        :key="section.id"
+        class="editor-block editor-section"
+        :data-section-id="section.id"
+        :class="{
+          'is-collapsed': !isSectionExpanded(section.id),
+          'is-focused': props.selectedSectionId === section.id,
+          'has-focused-bullet': Boolean(
+            props.focusedBulletId &&
+            section.entries.some((entry) =>
+              entry.bullets.some((bullet) => bullet.id === props.focusedBulletId),
+            ),
+          ),
+          'is-empty': section.entries.length === 0,
+          'is-reorder-source': draggedSectionId === section.id,
+          'is-drop-before': dropSectionId === section.id && dropBefore,
+          'is-drop-after': dropSectionId === section.id && !dropBefore,
+        }"
+        :ref="(element) => setSectionRef(section.id, element)"
+        role="group"
+        tabindex="0"
+        :aria-label="`${sectionTitle(section)}，第 ${sectionIndex + 1} 项`"
+        aria-describedby="resume-reorder-help"
+        aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+        @pointerdown="handleSectionPointerDown(section.id, $event)"
+        @pointerup="finishSectionReorder"
+        @pointercancel="clearSectionReorder"
+        @keydown="handleSectionKeydown(section.id, sectionIndex, $event)"
+      >
+        <header class="editor-block-header">
+          <button
+            type="button"
+            class="section-collapse-toggle"
+            :aria-expanded="isSectionExpanded(section.id)"
+            :aria-controls="`editor-section-${section.id}`"
+            :aria-label="`${isSectionExpanded(section.id) ? '收起' : '展开'}${sectionTitle(section)}`"
+            @click="toggleSection(section.id)"
+          >
+            <span class="section-collapse-icon" aria-hidden="true" />
+          </button>
+          <div class="section-heading">
+            <template v-if="editingSectionTitle === section.id">
+              <el-input
+                class="section-title-input"
+                :model-value="section.title"
+                :maxlength="LIMITS.sectionTitle"
+                aria-label="章节标题"
+                @update:model-value="
+                  (value: string) => updateSection(section.id, (target) => (target.title = value))
+                "
+                @blur="finishSectionTitleEdit"
+                @keyup.enter="finishSectionTitleEdit"
+                @keyup.esc="finishSectionTitleEdit"
+              />
+            </template>
+            <button
+              v-else
+              type="button"
+              class="section-title-display"
+              :aria-label="`编辑${sectionTitle(section)}标题`"
+              @click="beginSectionTitleEdit(section.id)"
+            >
+              {{ sectionTitle(section) }}
+            </button>
+          </div>
+        </header>
+
+        <div
+          v-if="isSectionExpanded(section.id)"
+          :id="`editor-section-${section.id}`"
+          class="editor-section-content"
+        >
+          <p v-if="section.entries.length === 0" class="editor-empty">
+            该章节暂时没有内容，可以添加{{ sectionEntryLabel(section.kind) }}。
+          </p>
+
+          <article
+            v-for="entry in section.entries"
+            :key="entry.id"
+            class="editor-entry"
+            :class="{ 'is-generic': !isStructuredSection(section.kind) }"
+            :data-entry-id="entry.id"
+          >
+            <div v-if="isStructuredSection(section.kind)" class="entry-document-heading">
+              <template v-if="isEntryEditing(section.id, entry.id)">
+                <div
+                  v-if="section.kind === 'SKILL'"
+                  class="entry-inline-editor"
+                  @keydown.esc="finishEntryEdit"
+                  @keydown.enter.prevent="finishEntryEdit"
+                >
+                  <el-input
+                    :model-value="entry.group ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="技能分组"
+                    aria-label="技能分组"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.group = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="skillItemsText(entry)"
+                    :maxlength="LIMITS.bullet"
+                    placeholder="技能项，用顿号分隔"
+                    aria-label="技能项"
+                    @update:model-value="
+                      (value: string) => setSkillItemsText(section.id, entry.id, value)
+                    "
+                  />
+                  <button type="button" class="inline-done" @click="finishEntryEdit">完成</button>
+                </div>
+                <div
+                  v-else-if="section.kind === 'EDUCATION'"
+                  class="entry-inline-editor entry-inline-editor-grid"
+                  @keydown.esc="finishEntryEdit"
+                  @keydown.enter.prevent="finishEntryEdit"
+                >
+                  <el-input
+                    :model-value="entry.school ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="学校"
+                    aria-label="学校"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.school = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="entry.degree ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="学历"
+                    aria-label="学历"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.degree = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="entry.major ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="专业"
+                    aria-label="专业"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.major = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="entry.startDate ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="开始时间"
+                    aria-label="开始时间"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.startDate = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="entry.endDate ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="结束时间"
+                    aria-label="结束时间"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.endDate = value))
+                    "
+                  />
+                  <button type="button" class="inline-done" @click="finishEntryEdit">完成</button>
+                </div>
+                <div
+                  v-else
+                  class="entry-inline-editor entry-inline-editor-grid"
+                  @keydown.esc="finishEntryEdit"
+                  @keydown.enter.prevent="finishEntryEdit"
+                >
+                  <el-input
+                    :model-value="entry.organization ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    :placeholder="section.kind === 'PROJECT' ? '项目名' : '公司'"
+                    :aria-label="section.kind === 'PROJECT' ? '项目名' : '公司'"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.organization = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="entry.role ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    :placeholder="section.kind === 'PROJECT' ? '角色' : '职位'"
+                    :aria-label="section.kind === 'PROJECT' ? '角色' : '职位'"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.role = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="entry.startDate ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="开始时间"
+                    aria-label="开始时间"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.startDate = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="entry.endDate ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="结束时间"
+                    aria-label="结束时间"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.endDate = value))
+                    "
+                  />
+                  <el-input
+                    :model-value="entry.location ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="地点（可选）"
+                    aria-label="地点"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.location = value))
+                    "
+                  />
+                  <button type="button" class="inline-done" @click="finishEntryEdit">完成</button>
+                </div>
+              </template>
+              <template v-else-if="section.kind === 'SKILL'">
+                <button
+                  type="button"
+                  class="entry-title-display"
+                  @click="beginEntryEdit(section.id, entry.id)"
+                >
+                  {{ entryTitle(entry, section.kind) }}
+                </button>
+                <button
+                  v-if="skillItemsText(entry)"
+                  type="button"
+                  class="entry-meta-display"
+                  @click="beginEntryEdit(section.id, entry.id)"
+                >
+                  {{ skillItemsText(entry) }}
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="entry-title-display"
+                  @click="beginEntryEdit(section.id, entry.id)"
+                >
+                  {{ entryTitle(entry, section.kind) }}
+                </button>
+                <button
+                  v-if="entryMeta(entry, section.kind)"
+                  type="button"
+                  class="entry-meta-display"
+                  @click="beginEntryEdit(section.id, entry.id)"
+                >
+                  {{ entryMeta(entry, section.kind) }}
+                </button>
+              </template>
+              <button
+                v-if="!isEntryEditing(section.id, entry.id)"
+                type="button"
+                class="entry-delete-action"
+                :aria-label="`删除条目：${entryTitle(entry, section.kind)}`"
+                @click="confirmDeleteEntry(section.id, entry.id, section.kind)"
+              >
+                删除条目
+              </button>
+            </div>
+            <template v-if="section.kind === 'SKILL'">
+              <div class="skill-grid">
+                <label class="editor-field">
+                  <span>技能分组</span>
+                  <el-input
+                    :model-value="entry.group ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="例如 后端技术"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.group = value))
+                    "
+                  />
+                </label>
+                <label class="editor-field">
+                  <span>技能项</span>
+                  <el-input
+                    :model-value="skillItemsText(entry)"
+                    :maxlength="LIMITS.bullet"
+                    placeholder="用顿号分隔，例如 Java、Spring Boot"
+                    @update:model-value="
+                      (value: string) => setSkillItemsText(section.id, entry.id, value)
+                    "
+                  />
+                </label>
+              </div>
+            </template>
+
+            <template v-else-if="section.kind === 'EDUCATION'">
+              <div class="entry-grid">
+                <label class="editor-field">
+                  <span>学校</span>
+                  <el-input
+                    :model-value="entry.school ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="学校名称"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.school = value))
+                    "
+                  />
+                </label>
+                <label class="editor-field">
+                  <span>学历</span>
+                  <el-input
+                    :model-value="entry.degree ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="例如 本科"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.degree = value))
+                    "
+                  />
+                </label>
+                <label class="editor-field">
+                  <span>专业</span>
+                  <el-input
+                    :model-value="entry.major ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    placeholder="专业名称"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.major = value))
+                    "
+                  />
+                </label>
+                <div class="date-grid">
+                  <label class="editor-field">
+                    <span>开始时间</span>
+                    <el-input
+                      :model-value="entry.startDate ?? ''"
+                      :maxlength="LIMITS.entryField"
+                      placeholder="例如 2018.09"
+                      @update:model-value="
+                        (value: string) =>
+                          updateEntry(section.id, entry.id, (target) => (target.startDate = value))
+                      "
+                    />
+                  </label>
+                  <label class="editor-field">
+                    <span>结束时间</span>
+                    <el-input
+                      :model-value="entry.endDate ?? ''"
+                      :maxlength="LIMITS.entryField"
+                      placeholder="例如 2022.06"
+                      @update:model-value="
+                        (value: string) =>
+                          updateEntry(section.id, entry.id, (target) => (target.endDate = value))
+                      "
+                    />
+                  </label>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="section.kind === 'EXPERIENCE' || section.kind === 'PROJECT'">
+              <div class="entry-grid">
+                <label class="editor-field">
+                  <span>{{ section.kind === 'PROJECT' ? '项目名' : '公司' }}</span>
+                  <el-input
+                    :model-value="entry.organization ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    :placeholder="section.kind === 'PROJECT' ? '项目名称' : '公司名称'"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.organization = value))
+                    "
+                  />
+                </label>
+                <label class="editor-field">
+                  <span>{{ section.kind === 'PROJECT' ? '角色' : '职位' }}</span>
+                  <el-input
+                    :model-value="entry.role ?? ''"
+                    :maxlength="LIMITS.entryField"
+                    :placeholder="section.kind === 'PROJECT' ? '项目角色（可选）' : '职位名称'"
+                    @update:model-value="
+                      (value: string) =>
+                        updateEntry(section.id, entry.id, (target) => (target.role = value))
+                    "
+                  />
+                </label>
+                <div class="date-grid">
+                  <label class="editor-field">
+                    <span>开始时间</span>
+                    <el-input
+                      :model-value="entry.startDate ?? ''"
+                      :maxlength="LIMITS.entryField"
+                      placeholder="例如 2022.07"
+                      @update:model-value="
+                        (value: string) =>
+                          updateEntry(section.id, entry.id, (target) => (target.startDate = value))
+                      "
+                    />
+                  </label>
+                  <label class="editor-field">
+                    <span>结束时间</span>
+                    <el-input
+                      :model-value="entry.endDate ?? ''"
+                      :maxlength="LIMITS.entryField"
+                      placeholder="例如 至今"
+                      @update:model-value="
+                        (value: string) =>
+                          updateEntry(section.id, entry.id, (target) => (target.endDate = value))
+                      "
+                    />
+                  </label>
+                </div>
+              </div>
+            </template>
+
+            <div v-if="section.kind !== 'SKILL'" class="entry-bullets-label">
+              {{ entryContentLabel(section.kind) }}
+            </div>
+            <template v-if="section.kind !== 'SKILL'">
+              <div
+                v-for="(bullet, bulletIndex) in entry.bullets"
+                :key="bullet.id"
+                class="bullet-block"
+                :class="{
+                  'is-evidence-focus': props.focusedBulletId === bullet.id,
+                  'is-suggest-active': suggestActive(bullet.id),
+                }"
+                :data-bullet-id="bullet.id"
+              >
+                <div class="bullet-line">
+                  <label class="bullet-field">
+                    <span class="sr-only">{{ entryContentLabel(section.kind) }}</span>
+                    <el-input
+                      type="textarea"
+                      :autosize="{ minRows: 1, maxRows: 6 }"
+                      :model-value="bullet.text"
+                      :maxlength="LIMITS.bullet"
+                      :placeholder="bulletPlaceholder(section.kind)"
+                      @update:model-value="
+                        (value: string) =>
+                          updateEntry(section.id, entry.id, (target) => {
+                            const targetBullet = target.bullets.find(
+                              (item) => item.id === bullet.id,
+                            )
+                            if (targetBullet) targetBullet.text = value
+                          })
+                      "
+                    />
+                  </label>
+                  <div class="bullet-actions">
+                    <el-dropdown
+                      v-if="suggestEnabled && suggest"
+                      trigger="click"
+                      @command="
+                        (command: unknown) =>
+                          handleSuggestCommand(bullet.id, command as BulletSuggestIntent | 'CUSTOM')
+                      "
+                    >
+                      <el-button
+                        class="bullet-suggest-button"
+                        size="small"
+                        :disabled="
+                          suggest.busy.value || suggestActive(bullet.id) || !bullet.text.trim()
+                        "
+                      >
+                        AI 优化
+                      </el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item
+                            v-for="item in SUGGEST_INTENTS"
+                            :key="item.command"
+                            :command="item.command"
+                          >
+                            {{ item.label }}
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                    <button
+                      type="button"
+                      class="bullet-delete-action"
+                      :aria-label="
+                        isStructuredSection(section.kind)
+                          ? bulletDeleteLabel(entry, section.kind, bulletIndex)
+                          : `删除${sectionTitle(section)}中的第 ${bulletIndex + 1} 条内容`
+                      "
+                      @click="deleteBullet(section.id, entry.id, bullet.id)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <div v-if="section.kind !== 'SKILL'" class="entry-actions">
+              <el-button size="small" @click="addBullet(section.id, entry.id)">
+                添加{{ entryContentLabel(section.kind) }}
+              </el-button>
+              <button
+                v-if="!isStructuredSection(section.kind)"
+                type="button"
+                class="entry-delete-action"
+                :aria-label="`删除${sectionTitle(section)}中的这段内容`"
+                @click="confirmDeleteEntry(section.id, entry.id, section.kind)"
+              >
+                删除内容
+              </button>
+            </div>
+          </article>
+
+          <div class="section-footer">
+            <el-button size="small" @click="addEntry(section.id)">{{
+              addEntryLabel(section.kind)
+            }}</el-button>
+          </div>
+        </div>
+      </section>
     </div>
     <p id="resume-reorder-help" class="sr-only">聚焦章节后使用 Alt 加上、下方向键调整顺序。</p>
     <div class="sr-only" aria-live="polite">{{ reorderAnnouncement }}</div>
@@ -1325,7 +1417,10 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   color: var(--app-primary);
   background: var(--app-surface-soft);
   cursor: pointer;
-  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
 }
 
 .section-collapse-toggle:hover,
@@ -1372,7 +1467,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   gap: 6px;
   padding: 5px 7px 7px;
   border: 1px solid transparent;
-  transition: border-color 140ms ease, background-color 140ms ease;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
 }
 
 .editor-field:hover,
@@ -1424,7 +1521,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   width: min(560px, 100%);
 }
 
-
 .editor-empty {
   margin: 0;
   color: var(--app-text-muted);
@@ -1439,7 +1535,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   padding: 18px 8px 0;
   border: 1px solid transparent;
   border-top-color: var(--app-border-soft);
-  transition: border-color 140ms ease, background-color 140ms ease;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
 }
 
 .editor-entry:hover,
@@ -1485,7 +1583,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   gap: 10px;
   align-items: start;
   border: 1px solid transparent;
-  transition: border-color 140ms ease, background-color 140ms ease;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
 }
 
 .bullet-line:hover,
@@ -1507,7 +1607,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   opacity: 0;
   transition: opacity 0.15s ease;
 }
-
 
 .bullet-suggest-button {
   color: var(--app-primary);
@@ -2002,7 +2101,9 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 .editor-section {
   position: relative;
   cursor: grab;
-  transition: background-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .editor-section :deep(input),
@@ -2158,15 +2259,21 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   transition: opacity 140ms ease;
 }
 
-.editor-section > .section-footer {
+.editor-section > .editor-section-content > .section-footer {
   min-height: 24px;
   padding-top: 5px;
-  opacity: 0.18;
+  opacity: 1;
+  pointer-events: auto;
   transition: opacity 140ms ease;
 }
 
-.editor-section.is-empty > .section-footer {
-  opacity: 1;
+.editor-entry.is-generic {
+  padding-top: 4px;
+  border-top-color: transparent;
+}
+
+.editor-entry.is-generic > .entry-actions {
+  gap: 12px;
 }
 
 .editor-entry:hover > .entry-actions,
@@ -2177,9 +2284,15 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .editor-section:not(.is-empty):hover > .section-footer,
-  .editor-section:not(.is-empty):focus-within > .section-footer {
+  .editor-section:not(.is-empty) > .editor-section-content > .section-footer {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .editor-section:not(.is-empty):hover > .editor-section-content > .section-footer,
+  .editor-section:not(.is-empty):focus-within > .editor-section-content > .section-footer {
     opacity: 1;
+    pointer-events: auto;
   }
 }
 
@@ -2328,8 +2441,12 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 }
 
 @keyframes resume-focus-pulse {
-  0% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-focus) 18%, transparent); }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-focus) 18%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2352,10 +2469,6 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
     height: auto;
     min-height: 24px;
     opacity: 0.55;
-  }
-
-  .editor-section:not(.is-empty) > .section-footer {
-    opacity: 0.32;
   }
 }
 
@@ -2423,11 +2536,5 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
     min-height: 24px;
     opacity: 0.55;
   }
-
-  .editor-section:not(.is-empty) > .section-footer {
-    opacity: 0.32;
-  }
-
 }
-
 </style>

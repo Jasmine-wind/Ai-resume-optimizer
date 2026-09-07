@@ -399,7 +399,7 @@ class WorkspaceExportServiceImplTest {
                 new PreviewReceiptClaims(USER_ID, TASK_ID, 100L, REVISION,
                         "classic", "1", ResumePdfRenderer.RENDERER_VERSION, sha256(PDF)),
                 new PreviewReceiptClaims(USER_ID, TASK_ID, TARGET_VERSION_ID, REVISION,
-                        "classic", "4", ResumePdfRenderer.RENDERER_VERSION, sha256(PDF)),
+                        "classic", "3", ResumePdfRenderer.RENDERER_VERSION, sha256(PDF)),
                 new PreviewReceiptClaims(USER_ID, TASK_ID, TARGET_VERSION_ID, REVISION,
                         "classic", "1", "another-renderer", sha256(PDF)));
 

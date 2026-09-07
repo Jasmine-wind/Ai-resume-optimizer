@@ -80,11 +80,7 @@ const preparationMessage = computed(() =>
     : (preparationMessages.value[selectedResumeId.value] ?? null),
 )
 const selectedResumeStatus = computed(() =>
-  getResumeStatus(
-    selectedResume.value,
-    preparationTaskId.value,
-    preparationMessage.value,
-  ),
+  getResumeStatus(selectedResume.value, preparationTaskId.value, preparationMessage.value),
 )
 const analysisRunning = computed(() => {
   const status = analysisTask.value?.status
@@ -122,13 +118,22 @@ const composerActionDetail = computed(() => {
   if (startBlockReason.value === '请粘贴目标岗位 JD') return ''
   if (analysisRunning.value) return currentStage.value
   if (activeAnalysis.value && analysisError.value) {
-    return analysisTimedOut.value ? '可以继续等待，或稍后回到首页查看。' : '当前任务已保留，可以直接重试。'
+    return analysisTimedOut.value
+      ? '可以继续等待，或稍后回到首页查看。'
+      : '当前任务已保留，可以直接重试。'
   }
-  if (selectedResumeStatus.value.kind === 'needs-review') return '前往确认后，这份简历才能用于岗位分析。'
-  if (selectedResumeStatus.value.kind === 'failed' || selectedResumeStatus.value.kind === 'reparse') {
+  if (selectedResumeStatus.value.kind === 'needs-review')
+    return '前往确认后，这份简历才能用于岗位分析。'
+  if (
+    selectedResumeStatus.value.kind === 'failed' ||
+    selectedResumeStatus.value.kind === 'reparse'
+  ) {
     return '可以前往我的简历处理，完成后再回来。'
   }
-  if (selectedResumeStatus.value.kind === 'preparing' || selectedResumeStatus.value.kind === 'pending') {
+  if (
+    selectedResumeStatus.value.kind === 'preparing' ||
+    selectedResumeStatus.value.kind === 'pending'
+  ) {
     return selectedResumeStatus.value.description
   }
   return '完成这一步后，开始核对岗位要求。'
@@ -422,12 +427,36 @@ const restoreActiveAnalysis = () => {
 const loadRecentTasks = async () => {
   recentTasksLoading.value = true
   recentTasksFailed.value = false
-  try { recentTasks.value = await getRecentOptimizationTasks() } catch { recentTasksFailed.value = true }
-  finally { recentTasksLoading.value = false }
+  try {
+    recentTasks.value = await getRecentOptimizationTasks()
+  } catch {
+    recentTasksFailed.value = true
+  } finally {
+    recentTasksLoading.value = false
+  }
 }
-const taskStatusLabel = (status: string) => ({ PENDING: '分析中', RUNNING: '分析中', SUCCESS: '已完成', FAILED: '分析失败', CANCELLED: '已取消' }[status] || '分析中')
-const taskStatusTone = (status: string) => ({ PENDING: 'pending', RUNNING: 'running', SUCCESS: 'success', FAILED: 'failed', CANCELLED: 'cancelled' }[status] || 'pending')
-const taskTime = (value?: string) => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : ''
+const taskStatusLabel = (status: string) =>
+  ({
+    PENDING: '分析中',
+    RUNNING: '分析中',
+    SUCCESS: '已完成',
+    FAILED: '分析失败',
+    CANCELLED: '已取消',
+  })[status] || '分析中'
+const taskStatusTone = (status: string) =>
+  ({
+    PENDING: 'pending',
+    RUNNING: 'running',
+    SUCCESS: 'success',
+    FAILED: 'failed',
+    CANCELLED: 'cancelled',
+  })[status] || 'pending'
+const taskTime = (value?: string) =>
+  value
+    ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(
+        new Date(value),
+      )
+    : ''
 
 const deleteRecentTask = async (task: OptimizationTask) => {
   if (deletingTaskId.value !== null) return
@@ -510,12 +539,19 @@ onUnmounted(() => {
               <span class="home-section-index">01</span>
               <span class="home-section-label">真实简历材料</span>
             </div>
-            <RouterLink class="home-management-link" to="/resumes">管理简历 <span aria-hidden="true">→</span></RouterLink>
+            <RouterLink class="home-management-link" to="/resumes"
+              >管理简历 <span aria-hidden="true">→</span></RouterLink
+            >
             <h3 id="home-source-title">选择用于本次核对的简历</h3>
             <p>本次分析只使用这里选中的简历内容。</p>
           </header>
 
-          <div v-if="resumes.length" class="home-resume-list" role="radiogroup" aria-labelledby="home-source-title">
+          <div
+            v-if="resumes.length"
+            class="home-resume-list"
+            role="radiogroup"
+            aria-labelledby="home-source-title"
+          >
             <label
               v-for="resume in resumes"
               :key="resume.id"
@@ -533,7 +569,10 @@ onUnmounted(() => {
               <span class="home-option-radio" aria-hidden="true" />
               <span class="home-option-copy">
                 <strong>{{ displayNameFor(resume) }}</strong>
-                <small>{{ resume.fileType }} · {{ statusForResume(resume).label }} · {{ resume.originalFilename }}</small>
+                <small
+                  >{{ resume.fileType }} · {{ statusForResume(resume).label }} ·
+                  {{ resume.originalFilename }}</small
+                >
               </span>
             </label>
           </div>
@@ -544,17 +583,31 @@ onUnmounted(() => {
             <p>先上传一份真实简历，系统会自动读取并准备内容。</p>
           </div>
 
-          <div v-if="selectedResume && selectedResumeStatus.kind !== 'ready'" class="home-resume-state" role="status" aria-live="polite">
-            <span class="home-state-mark" :class="`is-${selectedResumeStatus.kind}`" aria-hidden="true" />
+          <div
+            v-if="selectedResume && selectedResumeStatus.kind !== 'ready'"
+            class="home-resume-state"
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              class="home-state-mark"
+              :class="`is-${selectedResumeStatus.kind}`"
+              aria-hidden="true"
+            />
             <div>
               <strong>{{ selectedResumeStatus.label }}</strong>
               <p>{{ selectedResumeStatus.description }}</p>
               <RouterLink
-                v-if="selectedResumeStatus.kind === 'needs-review' || selectedResumeStatus.kind === 'failed' || selectedResumeStatus.kind === 'reparse'"
+                v-if="
+                  selectedResumeStatus.kind === 'needs-review' ||
+                  selectedResumeStatus.kind === 'failed' ||
+                  selectedResumeStatus.kind === 'reparse'
+                "
                 class="home-inline-link"
                 to="/resumes"
               >
-                {{ selectedResumeStatus.kind === 'needs-review' ? '前往确认' : '前往我的简历处理' }} <span aria-hidden="true">→</span>
+                {{ selectedResumeStatus.kind === 'needs-review' ? '前往确认' : '前往我的简历处理' }}
+                <span aria-hidden="true">→</span>
               </RouterLink>
             </div>
           </div>
@@ -629,14 +682,20 @@ onUnmounted(() => {
 加分项"
               :disabled="analysisRunning || startingAnalysis"
             />
-            <p id="home-jd-boundary" class="home-field-boundary">只保存你提供的岗位描述，不会自动改写或补充内容。</p>
+            <p id="home-jd-boundary" class="home-field-boundary">
+              只保存你提供的岗位描述，不会自动改写或补充内容。
+            </p>
           </div>
         </section>
       </div>
 
       <footer class="home-task-bar">
         <div id="home-start-status" class="home-action-summary" aria-live="polite">
-          <span v-if="analysisRunning || (activeAnalysis && analysisError)" class="home-action-label">{{ composerActionLabel }}</span>
+          <span
+            v-if="analysisRunning || (activeAnalysis && analysisError)"
+            class="home-action-label"
+            >{{ composerActionLabel }}</span
+          >
           <strong>{{ composerActionText }}</strong>
           <span v-if="composerActionDetail">{{ composerActionDetail }}</span>
         </div>
@@ -650,18 +709,29 @@ onUnmounted(() => {
             aria-describedby="home-start-status"
             @click="handleStartAnalysis"
           >
-            {{ startingAnalysis ? '正在启动…' : analysisRunning ? '正在核对…' : '开始核对岗位要求 →' }}
+            {{
+              startingAnalysis ? '正在启动…' : analysisRunning ? '正在核对…' : '开始核对岗位要求 →'
+            }}
           </el-button>
         </div>
       </footer>
 
-      <div v-if="analysisError && !activeAnalysis" class="home-analysis-state is-error" role="alert">
+      <div
+        v-if="analysisError && !activeAnalysis"
+        class="home-analysis-state is-error"
+        role="alert"
+      >
         <span class="home-state-mark is-failed" aria-hidden="true" />
         <div>
           <strong>岗位分析启动失败</strong>
           <p>{{ analysisError }} 当前选择和岗位 JD 仍保留，可以直接重试。</p>
           <div class="home-state-actions">
-            <el-button type="primary" plain :loading="startingAnalysis" @click="handleStartAnalysis">
+            <el-button
+              type="primary"
+              plain
+              :loading="startingAnalysis"
+              @click="handleStartAnalysis"
+            >
               重新开始
             </el-button>
           </div>
@@ -675,16 +745,31 @@ onUnmounted(() => {
         :role="analysisError ? 'alert' : 'status'"
         aria-live="polite"
       >
-        <span class="home-state-mark" :class="analysisError ? 'is-failed' : 'is-running'" aria-hidden="true" />
+        <span
+          class="home-state-mark"
+          :class="analysisError ? 'is-failed' : 'is-running'"
+          aria-hidden="true"
+        />
         <div>
           <strong>{{ analysisError ? analysisStateTitle : '岗位分析正在后台进行' }}</strong>
           <p>{{ analysisError || currentStage }}</p>
           <p v-if="analysisError && !analysisTimedOut">简历和岗位信息已保存，无需重新填写。</p>
           <div v-if="analysisError" class="home-state-actions">
-            <el-button v-if="analysisTimedOut" plain :loading="startingAnalysis" @click="continueWaiting">
+            <el-button
+              v-if="analysisTimedOut"
+              plain
+              :loading="startingAnalysis"
+              @click="continueWaiting"
+            >
               继续等待
             </el-button>
-            <el-button v-else type="primary" plain :loading="startingAnalysis" @click="retryAnalysis">
+            <el-button
+              v-else
+              type="primary"
+              plain
+              :loading="startingAnalysis"
+              @click="retryAnalysis"
+            >
               重试分析
             </el-button>
           </div>
@@ -695,31 +780,44 @@ onUnmounted(() => {
     <section class="home-recent-section" aria-labelledby="recent-title">
       <h2 id="recent-title">最近优化</h2>
       <p v-if="recentTasksLoading">正在读取最近优化…</p>
-      <p v-else-if="recentTasksFailed">暂时无法读取最近优化 <button type="button" @click="loadRecentTasks">重新加载</button></p>
-      <p v-else-if="!recentTasks.length">还没有岗位优化记录。完成第一次岗位分析后，可以从这里继续之前的工作。</p>
+      <p v-else-if="recentTasksFailed">
+        暂时无法读取最近优化 <button type="button" @click="loadRecentTasks">重新加载</button>
+      </p>
+      <p v-else-if="!recentTasks.length">
+        还没有岗位优化记录。完成第一次岗位分析后，可以从这里继续之前的工作。
+      </p>
       <article v-for="task in recentTasks" :key="task.optimizationTaskId" class="recent-task">
         <div class="recent-task-copy">
           <div class="recent-task-primary">
             <strong>{{ task.jobTitle || '未命名岗位' }}</strong>
-            <small class="recent-task-status" :class="`is-${taskStatusTone(task.status)}`">{{ taskStatusLabel(task.status) }}</small>
           </div>
           <span>{{ task.resumeName }} · {{ taskTime(task.updatedAt || task.createdAt) }}</span>
         </div>
         <div class="recent-task-actions">
+          <small class="recent-task-status" :class="`is-${taskStatusTone(task.status)}`">{{
+            taskStatusLabel(task.status)
+          }}</small>
           <el-button
             v-if="task.status === 'SUCCESS'"
             link
             type="primary"
             :disabled="deletingTaskId === task.optimizationTaskId"
-            @click="router.push({ name: 'job-analysis', params: { optimizationTaskId: task.optimizationTaskId } })"
-          >继续</el-button>
+            @click="
+              router.push({
+                name: 'job-analysis',
+                params: { optimizationTaskId: task.optimizationTaskId },
+              })
+            "
+            >继续</el-button
+          >
           <el-button
             v-else-if="task.status === 'FAILED'"
             link
             type="primary"
             :disabled="deletingTaskId === task.optimizationTaskId"
             @click="retryJobAnalysis(task.optimizationTaskId).then(loadRecentTasks)"
-          >重新分析</el-button>
+            >重新分析</el-button
+          >
           <el-button
             link
             class="recent-task-delete"
@@ -727,7 +825,8 @@ onUnmounted(() => {
             :disabled="deletingTaskId !== null"
             :aria-label="`删除岗位优化记录：${task.jobTitle || '未命名岗位'}`"
             @click="deleteRecentTask(task)"
-          >删除</el-button>
+            >删除</el-button
+          >
         </div>
       </article>
     </section>
@@ -737,7 +836,9 @@ onUnmounted(() => {
         <strong>岗位方向洞察</strong>
         <span>查看这份简历在近期岗位中反复遇到的要求。</span>
       </div>
-      <RouterLink class="home-insight-link" to="/job-direction-insights">查看洞察 <span aria-hidden="true">→</span></RouterLink>
+      <RouterLink class="home-insight-link" to="/job-direction-insights"
+        >查看洞察 <span aria-hidden="true">→</span></RouterLink
+      >
     </section>
   </section>
 </template>
@@ -1130,18 +1231,23 @@ onUnmounted(() => {
 }
 
 .recent-task-primary {
-  display: flex;
+  display: block;
   min-width: 0;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--app-space-3);
 }
 
 .recent-task-actions {
   display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--app-space-2);
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  gap: var(--app-space-2) var(--app-space-3);
+}
+
+.recent-task-actions > .el-button {
+  margin-left: 0;
 }
 
 .recent-task strong,
@@ -1150,8 +1256,14 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
 }
 
-.recent-task strong { color: var(--app-text); font-size: var(--app-font-size-md); }
-.recent-task span { color: var(--app-text-secondary); font-size: var(--app-font-size-sm); }
+.recent-task strong {
+  color: var(--app-text);
+  font-size: var(--app-font-size-md);
+}
+.recent-task span {
+  color: var(--app-text-secondary);
+  font-size: var(--app-font-size-sm);
+}
 .recent-task-status {
   flex: 0 0 auto;
   color: var(--app-text-muted);
@@ -1160,18 +1272,28 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.recent-task-status.is-success { color: var(--app-status-supported); }
+.recent-task-status.is-success {
+  color: var(--app-status-supported);
+}
 .recent-task-status.is-pending,
-.recent-task-status.is-running { color: var(--app-status-partial); }
-.recent-task-status.is-failed { color: var(--app-danger); }
-.recent-task-status.is-cancelled { color: var(--app-text-muted); }
+.recent-task-status.is-running {
+  color: var(--app-status-partial);
+}
+.recent-task-status.is-failed {
+  color: var(--app-danger);
+}
+.recent-task-status.is-cancelled {
+  color: var(--app-text-muted);
+}
 
 .recent-task-delete {
   color: var(--app-text-muted) !important;
   font-size: var(--app-font-size-xs);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 160ms ease, color 160ms ease;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease;
 }
 
 .recent-task:hover .recent-task-delete,
@@ -1183,6 +1305,18 @@ onUnmounted(() => {
 .recent-task-delete:hover,
 .recent-task-delete:focus-visible {
   color: var(--app-danger) !important;
+}
+
+.recent-task-delete:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .recent-task-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .home-library-link,
@@ -1414,7 +1548,10 @@ onUnmounted(() => {
   border-radius: var(--app-radius-sm);
   padding: 12px 13px;
   background: var(--app-surface);
-  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .home-resume-option input {
@@ -1531,13 +1668,21 @@ onUnmounted(() => {
   background: var(--app-primary);
 }
 
-.home-state-mark.is-ready { background: var(--app-success); }
+.home-state-mark.is-ready {
+  background: var(--app-success);
+}
 .home-state-mark.is-needs-review,
 .home-state-mark.is-preparing,
 .home-state-mark.is-pending,
-.home-state-mark.is-reparse { background: var(--app-warning); }
-.home-state-mark.is-failed { background: var(--app-danger); }
-.home-state-mark.is-running { animation: home-pulse 1.4s ease-in-out infinite; }
+.home-state-mark.is-reparse {
+  background: var(--app-warning);
+}
+.home-state-mark.is-failed {
+  background: var(--app-danger);
+}
+.home-state-mark.is-running {
+  animation: home-pulse 1.4s ease-in-out infinite;
+}
 
 .home-upload-trigger {
   justify-self: start;

@@ -126,7 +126,9 @@ describe('ResumeEditor', () => {
 
     const cancelChange = vi.fn()
     confirmEntryDelete.mockRejectedValueOnce(new Error('cancelled'))
-    const cancelWrapper = mount(ResumeEditor, { props: { document: makeDocument(), onChange: cancelChange } })
+    const cancelWrapper = mount(ResumeEditor, {
+      props: { document: makeDocument(), onChange: cancelChange },
+    })
     await cancelWrapper.get('.entry-delete-action').trigger('click')
     expect(cancelChange).not.toHaveBeenCalled()
 
@@ -258,11 +260,102 @@ describe('ResumeEditor', () => {
     expect(wrapper.text()).toContain('上海')
     expect(wrapper.text()).toContain('某公司')
     expect(wrapper.text()).toContain('后端工程师')
-    expect(wrapper.text()).toContain('旧 generic 标题')
-    expect(wrapper.text()).toContain('旧 generic 角色')
-    expect(wrapper.text()).toContain('旧日期')
+    // Generic sections are content-first: compatibility metadata must not be
+    // presented as a fake work entry.
+    expect(wrapper.get('[data-bullet-id="custom-bullet"] textarea').element.value).toBe('一段总结')
+    expect(wrapper.text()).not.toContain('旧 generic 标题')
+    expect(wrapper.text()).not.toContain('旧 generic 角色')
+    expect(wrapper.text()).not.toContain('旧日期')
+    expect(wrapper.text()).not.toContain('经历条目')
     expect(wrapper.text()).not.toContain('添加技能要点')
     expect(wrapper.text()).not.toContain('不应出现在技能编辑器里的内容')
+  })
+
+  it('presents generic sections as direct content and preserves bullet identity on edit', async () => {
+    const onChange = vi.fn()
+    const genericEntry = (entryId: string, bulletId: string, text: string) => ({
+      id: entryId,
+      organization: '不应作为标题展示',
+      role: '不应作为职位展示',
+      school: null,
+      degree: null,
+      major: null,
+      startDate: '旧日期',
+      endDate: null,
+      location: null,
+      group: null,
+      skillItems: null,
+      bullets: [{ id: bulletId, text }],
+    })
+    const document: ResumeDocument = {
+      schemaVersion: 'RESUME_DOCUMENT_V1',
+      basics: { name: '测试用户', contacts: [] },
+      sections: [
+        {
+          id: 'summary',
+          kind: 'SUMMARY',
+          title: '个人总结',
+          entries: [genericEntry('summary-entry', 'summary-bullet', '个人总结正文')],
+        },
+        {
+          id: 'certificate',
+          kind: 'CERTIFICATE',
+          title: '证书',
+          entries: [genericEntry('certificate-entry', 'certificate-bullet', 'CET-6')],
+        },
+        {
+          id: 'achievement',
+          kind: 'ACHIEVEMENT',
+          title: '荣誉奖项',
+          entries: [genericEntry('achievement-entry', 'achievement-bullet', '优秀毕业生')],
+        },
+        {
+          id: 'other',
+          kind: 'OTHER',
+          title: '补充说明',
+          entries: [genericEntry('other-entry', 'other-bullet', '可编辑补充内容')],
+        },
+        {
+          id: 'custom',
+          kind: 'CUSTOM',
+          title: '自定义章节',
+          entries: [genericEntry('custom-entry', 'custom-bullet', '自定义内容')],
+        },
+      ],
+    }
+
+    const wrapper = mount(ResumeEditor, { props: { document, onChange } })
+
+    expect(wrapper.get('[data-bullet-id="summary-bullet"] textarea').element.value).toBe(
+      '个人总结正文',
+    )
+    expect(wrapper.get('[data-bullet-id="certificate-bullet"] textarea').element.value).toBe(
+      'CET-6',
+    )
+    expect(wrapper.get('[data-bullet-id="achievement-bullet"] textarea').element.value).toBe(
+      '优秀毕业生',
+    )
+    expect(wrapper.get('[data-bullet-id="custom-bullet"] textarea').element.value).toBe(
+      '自定义内容',
+    )
+    expect(wrapper.text()).not.toContain('经历条目')
+    expect(wrapper.text()).not.toContain('不应作为标题展示')
+    expect(wrapper.findAll('.entry-document-heading')).toHaveLength(0)
+    expect(wrapper.findAll('.bullet-block')).toHaveLength(5)
+
+    const input = wrapper.get('[data-bullet-id="summary-bullet"] textarea')
+    await input.setValue('更新后的个人总结正文')
+    const changed = onChange.mock.lastCall![0] as ResumeDocument
+    expect(changed.sections.map((section) => section.id)).toEqual([
+      'summary',
+      'certificate',
+      'achievement',
+      'other',
+      'custom',
+    ])
+    expect(changed.sections[0]?.entries[0]?.id).toBe('summary-entry')
+    expect(changed.sections[0]?.entries[0]?.bullets[0]?.id).toBe('summary-bullet')
+    expect(changed.sections[0]?.entries[0]?.bullets[0]?.text).toBe('更新后的个人总结正文')
   })
 
   it('preserves all supported RESUME_DOCUMENT_V1 values while cloning a reactive proxy', async () => {
@@ -347,7 +440,12 @@ describe('ResumeEditor', () => {
     const document = makeDocument()
     const longContact = `https://example.com/${'long-profile/'.repeat(12)}`
     const longBullet = `负责中英文混排 delivery、稳定性治理与 URL https://example.com/runbook，${'持续验证真实数据。'.repeat(240)}`
-    document.basics.contacts.push({ id: 'website', type: 'WEBSITE', label: null, value: longContact })
+    document.basics.contacts.push({
+      id: 'website',
+      type: 'WEBSITE',
+      label: null,
+      value: longContact,
+    })
     document.sections[0]!.entries[0]!.bullets[0]!.text = longBullet
 
     const wrapper = mount(ResumeEditor, { props: { document } })
@@ -360,7 +458,9 @@ describe('ResumeEditor', () => {
   })
 
   it('focuses a newly added bullet so typing can continue immediately', async () => {
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValueOnce(
+      '00000000-0000-4000-8000-000000000001',
+    )
     const wrapper = mount(ResumeEditor, {
       props: {
         document: makeDocument(),
@@ -380,7 +480,9 @@ describe('ResumeEditor', () => {
   })
 
   it('opens and focuses the first field of a newly added entry', async () => {
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValueOnce(
+      '00000000-0000-4000-8000-000000000002',
+    )
     const wrapper = mount(ResumeEditor, {
       props: {
         document: makeDocument(),
@@ -420,7 +522,11 @@ describe('ResumeEditor', () => {
     await nextTick()
 
     for (const sectionId of ['s1', 's2', 's3']) {
-      expect(wrapper.get(`[data-section-id="${sectionId}"] .section-collapse-toggle`).attributes('aria-expanded')).toBe('true')
+      expect(
+        wrapper
+          .get(`[data-section-id="${sectionId}"] .section-collapse-toggle`)
+          .attributes('aria-expanded'),
+      ).toBe('true')
     }
 
     await wrapper.get('[data-section-id="s1"] .section-collapse-toggle').trigger('click')
@@ -428,21 +534,33 @@ describe('ResumeEditor', () => {
     await wrapper.setProps({ selectedSectionId: 's3' })
     await nextTick()
 
-    expect(wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded')).toBe('false')
-    expect(wrapper.get('[data-section-id="s2"] .section-collapse-toggle').attributes('aria-expanded')).toBe('false')
-    expect(wrapper.get('[data-section-id="s3"] .section-collapse-toggle').attributes('aria-expanded')).toBe('true')
+    expect(
+      wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('false')
+    expect(
+      wrapper.get('[data-section-id="s2"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('false')
+    expect(
+      wrapper.get('[data-section-id="s3"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('true')
 
     await wrapper.setProps({ selectedSectionId: 's1', focusedBulletId: 'b1' })
     await nextTick()
-    expect(wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded')).toBe('true')
+    expect(
+      wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('true')
     expect(wrapper.get('[data-bullet-id="b1"]').classes()).toContain('is-evidence-focus')
-    expect(wrapper.get('[data-section-id="s2"] .section-collapse-toggle').attributes('aria-expanded')).toBe('false')
+    expect(
+      wrapper.get('[data-section-id="s2"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('false')
 
     const updatedDocument = JSON.parse(JSON.stringify(document)) as ResumeDocument
     updatedDocument.sections[0]!.entries[0]!.bullets[0]!.text = '后台自动保存后的内容'
     await wrapper.setProps({ document: updatedDocument })
     await nextTick()
-    expect(wrapper.get('[data-section-id="s2"] .section-collapse-toggle').attributes('aria-expanded')).toBe('false')
+    expect(
+      wrapper.get('[data-section-id="s2"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('false')
   })
 
   it('opens new sections once and preserves expansion state across reorder', async () => {
@@ -457,16 +575,26 @@ describe('ResumeEditor', () => {
     updatedDocument.sections.push({ id: 's3', kind: 'OTHER', title: '补充内容', entries: [] })
     await wrapper.setProps({ document: updatedDocument })
     await nextTick()
-    expect(wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded')).toBe('false')
-    expect(wrapper.get('[data-section-id="s3"] .section-collapse-toggle').attributes('aria-expanded')).toBe('true')
+    expect(
+      wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('false')
+    expect(
+      wrapper.get('[data-section-id="s3"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('true')
 
-    await wrapper.get('[data-section-id="s1"]').trigger('keydown', { key: 'ArrowDown', altKey: true })
+    await wrapper
+      .get('[data-section-id="s1"]')
+      .trigger('keydown', { key: 'ArrowDown', altKey: true })
     const reordered = onChange.mock.lastCall![0] as ResumeDocument
     expect(reordered.sections.map((section) => section.id)).toEqual(['s2', 's1', 's3'])
     await wrapper.setProps({ document: reordered })
     await nextTick()
-    expect(wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded')).toBe('false')
-    expect(wrapper.get('[data-section-id="s3"] .section-collapse-toggle').attributes('aria-expanded')).toBe('true')
+    expect(
+      wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('false')
+    expect(
+      wrapper.get('[data-section-id="s3"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('true')
 
     const withoutS1 = JSON.parse(JSON.stringify(reordered)) as ResumeDocument
     withoutS1.sections = withoutS1.sections.filter((section) => section.id !== 's1')
@@ -478,7 +606,9 @@ describe('ResumeEditor', () => {
     restored.sections.push(JSON.parse(JSON.stringify(document.sections[0])))
     await wrapper.setProps({ document: restored })
     await nextTick()
-    expect(wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded')).toBe('true')
+    expect(
+      wrapper.get('[data-section-id="s1"] .section-collapse-toggle').attributes('aria-expanded'),
+    ).toBe('true')
   })
 
   it('reorders a section only after a desktop hold-drag and emits one document update', async () => {
@@ -492,10 +622,30 @@ describe('ResumeEditor', () => {
     const originalRect = HTMLElement.prototype.getBoundingClientRect
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
       if (this.getAttribute('data-section-id') === 's1') {
-        return { top: 0, bottom: 100, height: 100, left: 0, right: 500, width: 500, x: 0, y: 0, toJSON: () => ({}) }
+        return {
+          top: 0,
+          bottom: 100,
+          height: 100,
+          left: 0,
+          right: 500,
+          width: 500,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }
       }
       if (this.getAttribute('data-section-id') === 's2') {
-        return { top: 120, bottom: 220, height: 100, left: 0, right: 500, width: 500, x: 0, y: 120, toJSON: () => ({}) }
+        return {
+          top: 120,
+          bottom: 220,
+          height: 100,
+          left: 0,
+          right: 500,
+          width: 500,
+          x: 0,
+          y: 120,
+          toJSON: () => ({}),
+        }
       }
       return originalRect.call(this)
     })
@@ -503,50 +653,75 @@ describe('ResumeEditor', () => {
     expect(wrapper.find('.section-drag-handle').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('上移')
     expect(wrapper.text()).not.toContain('下移')
-    const dispatchPointer = (type: string, target: EventTarget, values: Record<string, unknown>) => {
+    const dispatchPointer = (
+      type: string,
+      target: EventTarget,
+      values: Record<string, unknown>,
+    ) => {
       const event = new Event(type, { bubbles: true, cancelable: true })
       Object.defineProperties(event, values)
       target.dispatchEvent(event)
     }
     dispatchPointer('pointerdown', firstSection.element, {
-      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 1 },
-      clientX: { value: 12 }, clientY: { value: 20 },
+      button: { value: 0 },
+      pointerType: { value: 'mouse' },
+      pointerId: { value: 1 },
+      clientX: { value: 12 },
+      clientY: { value: 20 },
     })
     dispatchPointer('pointerup', firstSection.element, {
-      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 1 },
-      clientX: { value: 12 }, clientY: { value: 20 },
+      button: { value: 0 },
+      pointerType: { value: 'mouse' },
+      pointerId: { value: 1 },
+      clientX: { value: 12 },
+      clientY: { value: 20 },
     })
     expect(onChange).not.toHaveBeenCalled()
     expect(vi.getTimerCount()).toBe(0)
 
     const textarea = firstSection.get('textarea')
     dispatchPointer('pointerdown', textarea.element, {
-      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 2 },
-      clientX: { value: 12 }, clientY: { value: 20 },
+      button: { value: 0 },
+      pointerType: { value: 'mouse' },
+      pointerId: { value: 2 },
+      clientX: { value: 12 },
+      clientY: { value: 20 },
     })
     await vi.advanceTimersByTimeAsync(230)
     await nextTick()
     expect(firstSection.classes()).not.toContain('is-reorder-source')
     dispatchPointer('pointerup', textarea.element, {
-      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 2 },
-      clientX: { value: 12 }, clientY: { value: 20 },
+      button: { value: 0 },
+      pointerType: { value: 'mouse' },
+      pointerId: { value: 2 },
+      clientX: { value: 12 },
+      clientY: { value: 20 },
     })
 
     dispatchPointer('pointerdown', firstSection.element, {
-      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 3 },
-      clientX: { value: 12 }, clientY: { value: 20 },
+      button: { value: 0 },
+      pointerType: { value: 'mouse' },
+      pointerId: { value: 3 },
+      clientX: { value: 12 },
+      clientY: { value: 20 },
     })
     await vi.advanceTimersByTimeAsync(230)
     await nextTick()
     dispatchPointer('pointerup', firstSection.element, {
-      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 3 },
-      clientX: { value: 12 }, clientY: { value: 20 },
+      button: { value: 0 },
+      pointerType: { value: 'mouse' },
+      pointerId: { value: 3 },
+      clientX: { value: 12 },
+      clientY: { value: 20 },
     })
     expect(onChange).not.toHaveBeenCalled()
 
     dispatchPointer('pointerdown', firstSection.element, {
-      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 1 },
-      clientX: { value: 12 }, clientY: { value: 20 },
+      button: { value: 0 },
+      pointerType: { value: 'mouse' },
+      pointerId: { value: 1 },
+      clientX: { value: 12 },
+      clientY: { value: 20 },
     })
     expect(vi.getTimerCount()).toBe(1)
     await vi.advanceTimersByTimeAsync(230)
@@ -563,8 +738,12 @@ describe('ResumeEditor', () => {
     await nextTick()
 
     expect(onChange).toHaveBeenCalledTimes(1)
-    expect((onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id)).toEqual(['s2', 's1'])
-    expect((onChange.mock.lastCall![0] as ResumeDocument).sections[1]?.entries[0]?.bullets[0]?.id).toBe('b1')
+    expect(
+      (onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id),
+    ).toEqual(['s2', 's1'])
+    expect(
+      (onChange.mock.lastCall![0] as ResumeDocument).sections[1]?.entries[0]?.bullets[0]?.id,
+    ).toBe('b1')
     wrapper.unmount()
     vi.restoreAllMocks()
     vi.useRealTimers()
@@ -576,7 +755,9 @@ describe('ResumeEditor', () => {
     document.sections.push({ id: 's2', kind: 'PROJECT', title: '项目经历', entries: [] })
     const wrapper = mount(ResumeEditor, { props: { document } })
 
-    await wrapper.get('.bullet-delete-action').trigger('pointerdown', { pointerId: 1, pointerType: 'mouse', button: 0 })
+    await wrapper
+      .get('.bullet-delete-action')
+      .trigger('pointerdown', { pointerId: 1, pointerType: 'mouse', button: 0 })
     await vi.advanceTimersByTimeAsync(230)
     expect(wrapper.get('[data-section-id="s1"]').classes()).not.toContain('is-reorder-source')
 
@@ -595,7 +776,9 @@ describe('ResumeEditor', () => {
     await firstSection.trigger('keydown', { key: 'ArrowDown', altKey: true })
 
     expect(onChange).toHaveBeenCalledTimes(1)
-    expect((onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id)).toEqual(['s2', 's1'])
+    expect(
+      (onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id),
+    ).toEqual(['s2', 's1'])
     expect(wrapper.text()).not.toContain('拖动排序')
   })
 

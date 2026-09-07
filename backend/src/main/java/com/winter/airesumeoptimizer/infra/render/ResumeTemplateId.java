@@ -8,7 +8,7 @@ import java.util.Arrays;
  */
 public enum ResumeTemplateId {
 
-    CLASSIC("classic", "3", "typst/classic/v3/main.typ"),
+    CLASSIC("classic", "4", "typst/classic/v4/main.typ"),
     MODERN("modern", "3", "typst/modern/v3/main.typ"),
     MINIMAL("minimal", "3", "typst/minimal/v3/main.typ");
 

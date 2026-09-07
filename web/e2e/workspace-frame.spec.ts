@@ -19,11 +19,25 @@ const document = {
       id: 'experience',
       kind: 'EXPERIENCE',
       title: '工作经历',
-      entries: [{
-        id: 'exp-1', organization: '某科技公司', role: '后端工程师', school: null, degree: null,
-        major: null, startDate: '2021', endDate: '2024', location: null, group: null, skillItems: null,
-        bullets: Array.from({ length: 12 }, (_, index) => ({ id: `bullet-${index}`, text: `负责 Java 后端服务与 Redis 缓存优化工作 ${index + 1}` })),
-      }],
+      entries: [
+        {
+          id: 'exp-1',
+          organization: '某科技公司',
+          role: '后端工程师',
+          school: null,
+          degree: null,
+          major: null,
+          startDate: '2021',
+          endDate: '2024',
+          location: null,
+          group: null,
+          skillItems: null,
+          bullets: Array.from({ length: 12 }, (_, index) => ({
+            id: `bullet-${index}`,
+            text: `负责 Java 后端服务与 Redis 缓存优化工作 ${index + 1}`,
+          })),
+        },
+      ],
     },
   ],
 }
@@ -33,18 +47,22 @@ const requirement = (id: number, level: string) => ({
   requirementText: id === 3 ? '具备 Redis 缓存设计经验' : `岗位要求 ${id}`,
   importance: 'REQUIRED',
   matchLevel: level,
-  conclusion: level === 'PARTIAL_EVIDENCE' ? '存在相关材料，但当前表达还不完整。' : '当前材料已有支持。',
+  conclusion:
+    level === 'PARTIAL_EVIDENCE' ? '存在相关材料，但当前表达还不完整。' : '当前材料已有支持。',
   suggestion: '建议核对真实使用场景并完善表达。',
-  evidences: [{
-    requirementEvidenceId: id * 10,
-    sectionLabel: '工作经历',
-    evidenceText: id === 3
-      ? '负责 Java 后端服务与 Redis 缓存优化工作 1'
-      : id === 4
-        ? '负责 Java 后端服务与 Redis 缓存优化工作 2'
-        : `简历中的证据 ${id}`,
-    supportLevel: level === 'MATCHED' ? 'SUFFICIENT' : 'PARTIAL',
-  }],
+  evidences: [
+    {
+      requirementEvidenceId: id * 10,
+      sectionLabel: '工作经历',
+      evidenceText:
+        id === 3
+          ? '负责 Java 后端服务与 Redis 缓存优化工作 1'
+          : id === 4
+            ? '负责 Java 后端服务与 Redis 缓存优化工作 2'
+            : `简历中的证据 ${id}`,
+      supportLevel: level === 'MATCHED' ? 'SUFFICIENT' : 'PARTIAL',
+    },
+  ],
 })
 
 const longDocument = {
@@ -56,9 +74,10 @@ const longDocument = {
       id: `contact-${index}`,
       type: index === 0 ? 'EMAIL' : index === 1 ? 'GITHUB' : index === 2 ? 'WEBSITE' : 'OTHER',
       label: null,
-      value: index === 0
-        ? 'long.resume.editor@example.com'
-        : `https://example.com/profiles/very-long-professional-address-${index}/中英文混排`,
+      value:
+        index === 0
+          ? 'long.resume.editor@example.com'
+          : `https://example.com/profiles/very-long-professional-address-${index}/中英文混排`,
     })),
   },
   sections: [
@@ -82,11 +101,12 @@ const longDocument = {
           const position = entryIndex * 6 + bulletIndex
           return {
             id: `bullet-${position}`,
-            text: position < 2
-              ? `负责 Java 后端服务与 Redis 缓存优化工作 ${position + 1}`
-              : position === 2
-                ? `负责中英文混排 delivery、稳定性治理与 URL https://example.com/runbook，${'持续验证真实数据。'.repeat(240)}`
-                : `负责第 ${position + 1} 项真实平台工程交付，覆盖 API、可观测性、容量规划与跨团队协作。`,
+            text:
+              position < 2
+                ? `负责 Java 后端服务与 Redis 缓存优化工作 ${position + 1}`
+                : position === 2
+                  ? `负责中英文混排 delivery、稳定性治理与 URL https://example.com/runbook，${'持续验证真实数据。'.repeat(240)}`
+                  : `负责第 ${position + 1} 项真实平台工程交付，覆盖 API、可观测性、容量规划与跨团队协作。`,
           }
         }),
       })),
@@ -95,20 +115,22 @@ const longDocument = {
       id: `section-${sectionIndex}`,
       kind: 'OTHER',
       title: `专业经历补充章节 ${sectionIndex + 1}`,
-      entries: [{
-        id: `other-entry-${sectionIndex}`,
-        organization: `长期项目与专业实践 ${sectionIndex + 1}`,
-        role: null,
-        school: null,
-        degree: null,
-        major: null,
-        startDate: null,
-        endDate: null,
-        location: null,
-        group: null,
-        skillItems: null,
-        bullets: [{ id: `other-bullet-${sectionIndex}`, text: `补充材料 ${sectionIndex + 1}` }],
-      }],
+      entries: [
+        {
+          id: `other-entry-${sectionIndex}`,
+          organization: `长期项目与专业实践 ${sectionIndex + 1}`,
+          role: null,
+          school: null,
+          degree: null,
+          major: null,
+          startDate: null,
+          endDate: null,
+          location: null,
+          group: null,
+          skillItems: null,
+          bullets: [{ id: `other-bullet-${sectionIndex}`, text: `补充材料 ${sectionIndex + 1}` }],
+        },
+      ],
     })),
   ],
 }
@@ -127,26 +149,51 @@ const analysis = {
     matchedCount: 7,
     partialEvidenceCount: 1,
     noEvidenceCount: 1,
-    requirements: Array.from({ length: 9 }, (_, index) => requirement(index + 1, index === 2 ? 'PARTIAL_EVIDENCE' : 'MATCHED')),
+    requirements: Array.from({ length: 9 }, (_, index) =>
+      requirement(index + 1, index === 2 ? 'PARTIAL_EVIDENCE' : 'MATCHED'),
+    ),
   },
   legacyAnalysis: null,
 }
 
-async function mockWorkspace(page: Page, options: { failSaveOnce?: boolean; denseRequirements?: boolean; longResume?: boolean } = {}) {
+async function mockWorkspace(
+  page: Page,
+  options: { failSaveOnce?: boolean; denseRequirements?: boolean; longResume?: boolean } = {},
+) {
   await page.addInitScript(() => localStorage.setItem('ai-resume-token', 'workspace-frame-token'))
-  await page.route('**/api/users/me', (route) => route.fulfill(response({
-    id: 1, username: 'workspace', email: 'workspace@example.invalid', nickname: '工作区测试用户', createdAt: '2026-01-01T00:00:00Z',
-  })))
+  await page.route('**/api/users/me', (route) =>
+    route.fulfill(
+      response({
+        id: 1,
+        username: 'workspace',
+        email: 'workspace@example.invalid',
+        nickname: '工作区测试用户',
+        createdAt: '2026-01-01T00:00:00Z',
+      }),
+    ),
+  )
   let saveAttempts = 0
   await page.route('**/api/workspace/42/content', (route) => {
     if (route.request().method() === 'GET') {
-      return route.fulfill(response({ optimizationTaskId: 42, revision: 3, document: options.longResume ? longDocument : document }))
+      return route.fulfill(
+        response({
+          optimizationTaskId: 42,
+          revision: 3,
+          document: options.longResume ? longDocument : document,
+        }),
+      )
     }
     saveAttempts += 1
     if (options.failSaveOnce && saveAttempts === 1) {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: 500, message: '保存服务暂时不可用', data: null }) })
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 500, message: '保存服务暂时不可用', data: null }),
+      })
     }
-    return route.fulfill(response({ saved: true, conflict: false, revision: 3 + saveAttempts, document: null }))
+    return route.fulfill(
+      response({ saved: true, conflict: false, revision: 3 + saveAttempts, document: null }),
+    )
   })
   const mockedRequirements = Array.from(
     { length: options.denseRequirements ? 18 : 9 },
@@ -159,16 +206,19 @@ async function mockWorkspace(page: Page, options: { failSaveOnce?: boolean; dens
       sectionEvidence.evidenceText = '补充材料 1'
     }
   }
-  const mockedAnalysis = options.denseRequirements || options.longResume
-    ? {
-        ...analysis,
-        evidenceAnalysis: {
-          ...analysis.evidenceAnalysis,
-          requirements: mockedRequirements,
-        },
-      }
-    : analysis
-  await page.route('**/api/optimization-tasks/42/analysis-result', (route) => route.fulfill(response(mockedAnalysis)))
+  const mockedAnalysis =
+    options.denseRequirements || options.longResume
+      ? {
+          ...analysis,
+          evidenceAnalysis: {
+            ...analysis.evidenceAnalysis,
+            requirements: mockedRequirements,
+          },
+        }
+      : analysis
+  await page.route('**/api/optimization-tasks/42/analysis-result', (route) =>
+    route.fulfill(response(mockedAnalysis)),
+  )
   await page.route('**/api/workspace/42/artifacts', (route) => route.fulfill(response([])))
   await page.route('**/api/workspace/42/bullet-suggestion', async (route) => {
     const body = route.request().postDataJSON() as {
@@ -177,18 +227,20 @@ async function mockWorkspace(page: Page, options: { failSaveOnce?: boolean; dens
       baseRevision: number
       originalText: string
     }
-    await route.fulfill(response({
-      requestId: body.requestId,
-      bulletId: body.bulletId,
-      baseRevision: body.baseRevision,
-      state: 'READY',
-      originalText: body.originalText,
-      suggestedText: `${body.originalText}，持续改善交付稳定性`,
-      reason: '保留真实事实，只让职责与结果更清楚。',
-      rejectCode: null,
-      rejectMessage: null,
-      modelName: 'workspace-frame-model',
-    }))
+    await route.fulfill(
+      response({
+        requestId: body.requestId,
+        bulletId: body.bulletId,
+        baseRevision: body.baseRevision,
+        state: 'READY',
+        originalText: body.originalText,
+        suggestedText: `${body.originalText}，持续改善交付稳定性`,
+        reason: '保留真实事实，只让职责与结果更清楚。',
+        rejectCode: null,
+        rejectMessage: null,
+        modelName: 'workspace-frame-model',
+      }),
+    )
   })
 }
 
@@ -197,21 +249,29 @@ test.beforeEach(({ page }) => {
   const messages: string[] = []
   issues.set(page, messages)
   page.on('console', (message) => {
-    if (message.type() === 'error' || message.type() === 'warning') messages.push(`${message.type()}: ${message.text()}`)
+    if (message.type() === 'error' || message.type() === 'warning')
+      messages.push(`${message.type()}: ${message.text()}`)
   })
   page.on('pageerror', (error) => messages.push(`pageerror: ${error.message}`))
 })
 test.afterEach(({ page }) => expect(issues.get(page) ?? []).toEqual([]))
 
 test.describe('Workspace editor frame', () => {
-  for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
-    test(`keeps the resume-first two-pane layout at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  for (const viewport of [
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+  ]) {
+    test(`keeps the resume-first two-pane layout at ${viewport.width}x${viewport.height}`, async ({
+      page,
+    }) => {
       await page.setViewportSize(viewport)
       await mockWorkspace(page)
       await page.goto('/workspace/42?requirement=3')
       await expect(page.locator('.workspace-layout')).toBeVisible()
       await expect(page.getByText('岗位定向编辑', { exact: true })).toBeHidden()
-      await expect(page.getByText('当前优化：具备 Redis 缓存设计经验', { exact: true })).toBeHidden()
+      await expect(
+        page.getByText('当前优化：具备 Redis 缓存设计经验', { exact: true }),
+      ).toBeHidden()
       await expect(page.locator('.workspace-context-strip')).toHaveCount(0)
       await expect(page.getByText('简历正文', { exact: true })).toBeVisible()
       await expect(page.getByText('✓ 已保存', { exact: true })).toBeVisible()
@@ -222,9 +282,18 @@ test.describe('Workspace editor frame', () => {
       await expect(page.getByText('补充信息', { exact: true })).toBeVisible()
       await page.locator('.bullet-line').first().hover()
       await expect(page.getByRole('button', { name: 'AI 优化', exact: true }).first()).toBeVisible()
-      await expect(page.getByRole('button', { name: '删除某科技公司中的第 1 条工作要点', exact: true })).toBeVisible()
+      await expect(
+        page.getByRole('button', { name: '删除某科技公司中的第 1 条工作要点', exact: true }),
+      ).toBeVisible()
       await page.locator('.editor-entry').first().hover()
-      await expect(page.getByRole('button', { name: '删除条目：某科技公司', exact: true })).toBeVisible()
+      await expect(
+        page.getByRole('button', { name: '删除条目：某科技公司', exact: true }),
+      ).toBeVisible()
+      const sectionFooter = page.locator('[data-section-id="experience"] .section-footer')
+      await page.mouse.move(0, 0)
+      await expect(sectionFooter).toHaveCSS('opacity', '0')
+      await page.locator('[data-section-id="experience"]').hover()
+      await expect(sectionFooter).toHaveCSS('opacity', '1')
       await expect(page.locator('.editor-section.is-focused')).toBeVisible()
       await expect(page.locator('.bullet-block.is-evidence-focus')).toHaveCount(1)
       const section = page.locator('.editor-section').first()
@@ -243,8 +312,15 @@ test.describe('Workspace editor frame', () => {
       const metrics = await page.evaluate(() => {
         const app = document.querySelector<HTMLElement>('.app-page')!
         const layout = document.querySelector<HTMLElement>('.workspace-layout')!
-        const columns = Array.from(layout.children).map((child) => child.getBoundingClientRect().width)
-        return { appScrollHeight: app.scrollHeight, appClientHeight: app.clientHeight, appScrollTop: app.scrollTop, columns }
+        const columns = Array.from(layout.children).map(
+          (child) => child.getBoundingClientRect().width,
+        )
+        return {
+          appScrollHeight: app.scrollHeight,
+          appClientHeight: app.clientHeight,
+          appScrollTop: app.scrollTop,
+          columns,
+        }
       })
       expect(metrics.appScrollHeight).toBeLessThanOrEqual(metrics.appClientHeight + 1)
       expect(metrics.appScrollTop).toBe(0)
@@ -253,7 +329,30 @@ test.describe('Workspace editor frame', () => {
     })
   }
 
-  test('keeps requirements and document scrollable while inspector stays concise', async ({ page }) => {
+  test('keeps non-empty section add action discoverable for coarse pointers', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:5173',
+      hasTouch: true,
+      viewport: { width: 1024, height: 900 },
+    })
+    const page = await context.newPage()
+    try {
+      await mockWorkspace(page)
+      await page.goto('/workspace/42?requirement=3')
+      const footer = page.locator('[data-section-id="experience"] .section-footer')
+      await expect(footer).toHaveCSS('opacity', '1')
+      await expect(footer).toHaveCSS('pointer-events', 'auto')
+      await expect(footer.getByRole('button', { name: '添加工作经历' })).toBeVisible()
+    } finally {
+      await context.close()
+    }
+  })
+
+  test('keeps requirements and document scrollable while inspector stays concise', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 })
     await mockWorkspace(page, { denseRequirements: true })
     await page.goto('/workspace/42?requirement=3')
@@ -262,7 +361,9 @@ test.describe('Workspace editor frame', () => {
     const editor = page.locator('.resume-stage-scroll')
     await requirements.hover()
     await page.mouse.wheel(0, 600)
-    await expect.poll(() => requirements.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+    await expect
+      .poll(() => requirements.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0)
     await editor.hover()
     await page.mouse.wheel(0, 600)
     await expect.poll(() => editor.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
@@ -279,7 +380,9 @@ test.describe('Workspace editor frame', () => {
     expect(await app.evaluate((element) => element.scrollTop)).toBe(0)
   })
 
-  test('opens the AI inspector for one bullet and keeps the suggestion lifecycle controls together', async ({ page }) => {
+  test('opens the AI inspector for one bullet and keeps the suggestion lifecycle controls together', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1366, height: 768 })
     await mockWorkspace(page)
     await page.goto('/workspace/42?requirement=3')
@@ -307,7 +410,9 @@ test.describe('Workspace editor frame', () => {
 
     const bullet = page.locator('[data-bullet-id="bullet-0"]')
     await bullet.hover()
-    await bullet.getByRole('button', { name: '删除某科技公司中的第 1 条工作要点', exact: true }).click()
+    await bullet
+      .getByRole('button', { name: '删除某科技公司中的第 1 条工作要点', exact: true })
+      .click()
     await expect(page.locator('[data-bullet-id="bullet-0"]')).toHaveCount(0)
     await page.getByRole('button', { name: '撤销', exact: true }).click()
     await expect(page.locator('[data-bullet-id="bullet-0"]')).toHaveCount(1)
@@ -328,7 +433,10 @@ test.describe('Workspace editor frame', () => {
 
     await entry.hover()
     await entry.getByRole('button', { name: '删除条目：某科技公司', exact: true }).click()
-    await page.locator('.el-message-box__btns').getByRole('button', { name: '删除', exact: true }).click()
+    await page
+      .locator('.el-message-box__btns')
+      .getByRole('button', { name: '删除', exact: true })
+      .click()
     await expect(page.locator('[data-entry-id="exp-1"]')).toHaveCount(0)
   })
 
@@ -339,13 +447,17 @@ test.describe('Workspace editor frame', () => {
     await page.getByRole('button', { name: '编辑姓名' }).click()
     const name = page.locator('.identity-name-input input')
     await name.fill('Alex Chen Updated')
-    await expect(page.getByText('保存失败 · 重新保存', { exact: true })).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText('保存失败 · 重新保存', { exact: true })).toBeVisible({
+      timeout: 5_000,
+    })
     await expect(page.getByRole('button', { name: '重新保存' })).toBeVisible()
     await page.getByRole('button', { name: '重新保存' }).click()
     await expect(page.getByText('✓ 已保存', { exact: true })).toBeVisible({ timeout: 5_000 })
   })
 
-  test('keeps long-form editing focused, saved and connected to requirement evidence', async ({ page }) => {
+  test('keeps long-form editing focused, saved and connected to requirement evidence', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await mockWorkspace(page, { denseRequirements: true, longResume: true })
     await page.goto('/workspace/42?requirement=3')
@@ -353,30 +465,45 @@ test.describe('Workspace editor frame', () => {
     const firstEvidence = page.locator('[data-bullet-id="bullet-0"]')
     await expect(firstEvidence).toHaveClass(/is-evidence-focus/)
     await expect(firstEvidence).toBeInViewport()
-    await expect(page.getByRole('button', { name: '编辑个人网站' }).first()).toContainText('https://example.com/profiles/')
+    await expect(page.getByRole('button', { name: '编辑个人网站' }).first()).toContainText(
+      'https://example.com/profiles/',
+    )
 
     const longBullet = page.locator('[data-bullet-id="bullet-2"] textarea')
-    await longBullet.fill(`负责中英文混排 delivery 与稳定性治理，${'持续验证真实数据。'.repeat(80)}`)
+    await longBullet.fill(
+      `负责中英文混排 delivery 与稳定性治理，${'持续验证真实数据。'.repeat(80)}`,
+    )
     await expect(page.getByText('✓ 已保存', { exact: true })).toBeVisible({ timeout: 5_000 })
     await expect(longBullet).toBeFocused()
 
     const collapsedSectionIds = ['section-0', 'section-1', 'section-2', 'section-3']
     for (const sectionId of collapsedSectionIds) {
       await page.locator(`[data-section-id="${sectionId}"] .section-collapse-toggle`).click()
-      await expect(page.locator(`[data-section-id="${sectionId}"] .section-collapse-toggle`)).toHaveAttribute('aria-expanded', 'false')
+      await expect(
+        page.locator(`[data-section-id="${sectionId}"] .section-collapse-toggle`),
+      ).toHaveAttribute('aria-expanded', 'false')
     }
 
     await page.getByRole('button', { name: /岗位要求 4/ }).click()
     const targetSection = page.locator('[data-section-id="section-0"]')
     const targetEvidence = page.locator('[data-bullet-id="other-bullet-0"]')
-    await expect(targetSection.locator('.section-collapse-toggle')).toHaveAttribute('aria-expanded', 'true')
+    await expect(targetSection.locator('.section-collapse-toggle')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
     await expect(targetEvidence).toHaveClass(/is-evidence-focus/)
     await expect(targetEvidence).toBeInViewport()
-    await expect(page.locator('[data-section-id="section-1"] .section-collapse-toggle')).toHaveAttribute('aria-expanded', 'false')
+    await expect(
+      page.locator('[data-section-id="section-1"] .section-collapse-toggle'),
+    ).toHaveAttribute('aria-expanded', 'false')
 
     await page.getByRole('button', { name: '具备 Redis 缓存设计经验' }).click()
-    await expect(page.locator('[data-section-id="section-0"] .section-collapse-toggle')).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.locator('[data-section-id="section-1"] .section-collapse-toggle')).toHaveAttribute('aria-expanded', 'false')
+    await expect(
+      page.locator('[data-section-id="section-0"] .section-collapse-toggle'),
+    ).toHaveAttribute('aria-expanded', 'true')
+    await expect(
+      page.locator('[data-section-id="section-1"] .section-collapse-toggle'),
+    ).toHaveAttribute('aria-expanded', 'false')
     const nextEvidence = page.locator('[data-bullet-id="bullet-0"]')
     await expect(nextEvidence).toHaveClass(/is-evidence-focus/)
     await expect(nextEvidence).toBeInViewport()
@@ -404,7 +531,9 @@ test.describe('Workspace editor frame', () => {
     await page.getByRole('tab', { name: '岗位要求' }).click()
     await page.getByRole('button', { name: /岗位要求 4/ }).click()
     await expect(editorTab).toHaveAttribute('aria-selected', 'true')
-    await expect(page.locator('[data-section-id="section-0"] .section-collapse-toggle')).toHaveAttribute('aria-expanded', 'true')
+    await expect(
+      page.locator('[data-section-id="section-0"] .section-collapse-toggle'),
+    ).toHaveAttribute('aria-expanded', 'true')
     const mobileAnchoredBullet = page.locator('[data-bullet-id="other-bullet-0"]')
     await expect(mobileAnchoredBullet).toHaveClass(/is-evidence-focus/)
     await expect(mobileAnchoredBullet).toBeInViewport()
@@ -412,53 +541,90 @@ test.describe('Workspace editor frame', () => {
     await expect(page.getByText('✓ 已保存', { exact: true })).toBeVisible({ timeout: 5_000 })
     await expect(mobileAnchoredBullet).toHaveClass(/is-evidence-focus/)
     await expect(mobileAnchoredBullet).toBeInViewport()
-    await expect(page.locator('[data-section-id="section-1"] .section-collapse-toggle')).toHaveAttribute('aria-expanded', 'false')
+    await expect(
+      page.locator('[data-section-id="section-1"] .section-collapse-toggle'),
+    ).toHaveAttribute('aria-expanded', 'false')
     const layout = await page.evaluate(() => {
       const app = document.querySelector<HTMLElement>('.app-page')!
       const stage = document.querySelector<HTMLElement>('.resume-stage-scroll')!
       const paper = document.querySelector<HTMLElement>('.resume-paper')!
       return {
-        documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        documentOverflow:
+          document.documentElement.scrollWidth - document.documentElement.clientWidth,
         appOverflow: app.scrollWidth - app.clientWidth,
         stageOverflow: stage.scrollWidth - stage.clientWidth,
         paperOverflow: paper.scrollWidth - paper.clientWidth,
       }
     })
-    expect(layout).toEqual({ documentOverflow: 0, appOverflow: 0, stageOverflow: 0, paperOverflow: 0 })
+    expect(layout).toEqual({
+      documentOverflow: 0,
+      appOverflow: 0,
+      stageOverflow: 0,
+      paperOverflow: 0,
+    })
   })
 
-  test('opens narrow workspace in the editable document and keeps the outer page fixed', async ({ page }) => {
+  test('opens narrow workspace in the editable document and keeps the outer page fixed', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockWorkspace(page)
     await page.goto('/workspace/42?requirement=3')
     const editorTab = page.getByRole('tab', { name: '编辑简历' })
     await expect(editorTab).toHaveAttribute('aria-selected', 'true')
     await expect(editorTab).toHaveAttribute('aria-controls', 'workspace-panel-editor')
-    await expect(page.locator('#workspace-panel-editor')).toHaveAttribute('aria-labelledby', 'workspace-tab-editor')
+    await expect(page.locator('#workspace-panel-editor')).toHaveAttribute(
+      'aria-labelledby',
+      'workspace-tab-editor',
+    )
     await expect(page.locator('.resume-stage')).toBeVisible()
     await expect(page.locator('.workspace-inspector')).toBeHidden()
     await expect(page.locator('.workspace-requirements')).toBeHidden()
     const requirementsTab = page.getByRole('tab', { name: '岗位要求' })
     await requirementsTab.click()
     await expect(requirementsTab).toHaveAttribute('aria-controls', 'workspace-panel-requirements')
-    await expect(page.locator('#workspace-panel-requirements')).toHaveAttribute('aria-labelledby', 'workspace-tab-requirements')
+    await expect(page.locator('#workspace-panel-requirements')).toHaveAttribute(
+      'aria-labelledby',
+      'workspace-tab-requirements',
+    )
     await expect(page.locator('.workspace-requirements')).toBeVisible()
-    await expect.poll(() => page.evaluate(() => {
-      const list = document.querySelector('.requirement-list')?.getBoundingClientRect()
-      const selected = document.querySelector('.requirement-item.is-selected')?.getBoundingClientRect()
-      return Boolean(list && selected && selected.left >= list.left - 1 && selected.right <= list.right + 1)
-    })).toBe(true)
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const list = document.querySelector('.requirement-list')?.getBoundingClientRect()
+          const selected = document
+            .querySelector('.requirement-item.is-selected')
+            ?.getBoundingClientRect()
+          return Boolean(
+            list && selected && selected.left >= list.left - 1 && selected.right <= list.right + 1,
+          )
+        }),
+      )
+      .toBe(true)
     await page.getByRole('tab', { name: '编辑简历' }).click()
-    const appMetrics = await page.locator('.app-page').evaluate((element) => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, scrollTop: element.scrollTop, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }))
+    const appMetrics = await page
+      .locator('.app-page')
+      .evaluate((element) => ({
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        scrollTop: element.scrollTop,
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }))
     expect(appMetrics.scrollHeight).toBeLessThanOrEqual(appMetrics.clientHeight + 1)
     expect(appMetrics.scrollWidth).toBeLessThanOrEqual(appMetrics.clientWidth + 1)
     expect(appMetrics.scrollTop).toBe(0)
     const suggestionsTab = page.getByRole('tab', { name: /分析详情/ })
     await suggestionsTab.click()
     await expect(suggestionsTab).toHaveAttribute('aria-controls', 'workspace-panel-suggestions')
-    await expect(page.locator('#workspace-panel-suggestions')).toHaveAttribute('aria-labelledby', 'workspace-tab-suggestions')
+    await expect(page.locator('#workspace-panel-suggestions')).toHaveAttribute(
+      'aria-labelledby',
+      'workspace-tab-suggestions',
+    )
     await expect(page.locator('.workspace-inspector')).toBeVisible()
-    await expect(page.locator('.workspace-inspector').getByText('岗位要求', { exact: true })).toBeVisible()
+    await expect(
+      page.locator('.workspace-inspector').getByText('岗位要求', { exact: true }),
+    ).toBeVisible()
     await expect(page.getByRole('button', { name: '分析详情' })).toHaveCount(0)
 
     await page.getByRole('tab', { name: '编辑简历' }).click()

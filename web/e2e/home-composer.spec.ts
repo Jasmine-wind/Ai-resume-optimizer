@@ -59,6 +59,19 @@ async function mockHome(
     ),
   )
   await page.route('**/api/resumes', (route) => route.fulfill(response(resumes)))
+  await page.route('**/api/settings/ai-provider', (route) =>
+    route.fulfill(response({
+      providerType: 'OPENAI_COMPATIBLE',
+      baseUrl: 'https://api.example.invalid/v1',
+      model: 'e2e-model',
+      config: {},
+      status: 'ACTIVE',
+      configured: true,
+      apiKeyConfigured: true,
+      maskedApiKey: '••••••••',
+      credentialStorageAvailable: true,
+    })),
+  )
   await page.route('**/api/job-direction-insights', (route) => route.fulfill(response(insights)))
   await page.route('**/api/optimization-tasks/recent*', (route) =>
     route.fulfill(response(recentTasks)),

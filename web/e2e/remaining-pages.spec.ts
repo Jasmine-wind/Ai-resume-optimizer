@@ -301,9 +301,9 @@ test.describe('AI settings', () => {
       await route.fulfill(result(current))
     })
     await page.goto('/settings/ai-provider')
-    await expect(page.getByText('你保存的 API 已启用')).toBeVisible()
-    await page.getByRole('button', { name: '停用' }).click()
-    await expect(page.getByText('你的 API 已保存，尚未启用')).toBeVisible()
+    await expect(page.getByLabel('当前状态').getByText('你的 API 已启用', { exact: true })).toBeVisible()
+    await page.getByLabel('你的 API 已启用').getByRole('button', { name: '停用', exact: true }).click()
+    await expect(page.getByLabel('当前状态').getByText('你的 API 已保存，尚未启用', { exact: true })).toBeVisible()
   })
 })
 

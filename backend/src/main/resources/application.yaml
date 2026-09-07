@@ -12,6 +12,7 @@ spring:
     model:
       audio:
         speech: none
+        transcription: none
     openai:
       # Legacy adapter properties are test-only transport settings. Production
       # generation uses the current user's encrypted BYOK selection instead.

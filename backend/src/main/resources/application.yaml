@@ -7,6 +7,11 @@ spring:
   profiles:
     default: local
   ai:
+    # Spring AI's optional audio starter must not create a platform-owned
+    # provider bean. Generation is handled by the credential-aware gateway.
+    model:
+      audio:
+        speech: none
     openai:
       # Legacy adapter properties are test-only transport settings. Production
       # generation uses the current user's encrypted BYOK selection instead.

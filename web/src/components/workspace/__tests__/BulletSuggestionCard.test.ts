@@ -28,6 +28,25 @@ describe('BulletSuggestionCard', () => {
     expect(wrapper.text()).toContain('继续手工编辑')
   })
 
+  it('shows a neutral low-value result without diff or apply actions', () => {
+    const wrapper = mount(BulletSuggestionCard, {
+      props: {
+        mode: 'rejected',
+        originalText: '设计统一订单状态机，落地分布式事务方案',
+        rejectCode: 'LOW_VALUE_CHANGE',
+        rejectMessage: '这次改写只产生了很轻微的表达变化，没有足够价值，建议保留原文。',
+      },
+      global: { stubs: { ElButton } },
+    })
+
+    expect(wrapper.text()).toContain('这条内容暂时不需要改')
+    expect(wrapper.text()).toContain('原文已经比较清楚')
+    expect(wrapper.text()).not.toContain('没有通过事实校验')
+    expect(wrapper.text()).not.toContain('采纳')
+    expect(wrapper.text()).toContain('换个方向')
+    expect(wrapper.get('.bullet-suggestion').classes()).toContain('is-low-value')
+  })
+
   it('shows original, suggested expression, deterministic diff and apply action together', async () => {
     const wrapper = mount(BulletSuggestionCard, {
       props: {

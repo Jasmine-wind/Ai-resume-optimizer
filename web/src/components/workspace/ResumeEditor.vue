@@ -1105,7 +1105,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
               <button
                 v-if="!isEntryEditing(section.id, entry.id)"
                 type="button"
-                class="entry-delete-action"
+                class="entry-delete-action is-heading-delete"
                 :aria-label="`删除条目：${entryTitle(entry, section.kind)}`"
                 @click="confirmDeleteEntry(section.id, entry.id, section.kind)"
               >
@@ -1349,7 +1349,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
               <button
                 v-if="!isStructuredSection(section.kind)"
                 type="button"
-                class="entry-delete-action"
+                class="entry-delete-action is-inline-delete"
                 :aria-label="`删除${sectionTitle(section)}中的这段内容`"
                 @click="confirmDeleteEntry(section.id, entry.id, section.kind)"
               >
@@ -1628,6 +1628,8 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 }
 
 .entry-actions {
+  align-items: center;
+  gap: 12px;
   padding-top: 2px;
 }
 
@@ -2414,6 +2416,15 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 }
 
 .entry-delete-action {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  align-self: center;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.entry-delete-action.is-heading-delete {
   grid-column: 3;
   grid-row: 1 / span 2;
   align-self: start;
@@ -2423,8 +2434,8 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   transition: opacity 140ms ease;
 }
 
-.editor-entry:hover .entry-delete-action,
-.editor-entry:focus-within .entry-delete-action {
+.editor-entry:hover .entry-delete-action.is-heading-delete,
+.editor-entry:focus-within .entry-delete-action.is-heading-delete {
   opacity: 1;
   pointer-events: auto;
 }
@@ -2470,7 +2481,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
     opacity: 1;
   }
 
-  .entry-delete-action {
+  .entry-delete-action.is-heading-delete {
     opacity: 0.72;
     pointer-events: auto;
   }
@@ -2513,7 +2524,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
     grid-column: 1;
   }
 
-  .entry-delete-action {
+  .entry-delete-action.is-heading-delete {
     grid-column: 2;
     grid-row: 1 / span 2;
   }
@@ -2536,7 +2547,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
     opacity: 1;
   }
 
-  .entry-delete-action {
+  .entry-delete-action.is-heading-delete {
     opacity: 0.72;
     pointer-events: auto;
   }

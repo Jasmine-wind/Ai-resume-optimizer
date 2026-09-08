@@ -158,7 +158,12 @@ const analysis = {
 
 async function mockWorkspace(
   page: Page,
-  options: { failSaveOnce?: boolean; denseRequirements?: boolean; longResume?: boolean } = {},
+  options: {
+    failSaveOnce?: boolean
+    denseRequirements?: boolean
+    longResume?: boolean
+    lowValueSuggestion?: boolean
+  } = {},
 ) {
   await page.addInitScript(() => localStorage.setItem('ai-resume-token', 'workspace-frame-token'))
   await page.route('**/api/users/me', (route) =>
@@ -232,12 +237,16 @@ async function mockWorkspace(
         requestId: body.requestId,
         bulletId: body.bulletId,
         baseRevision: body.baseRevision,
-        state: 'READY',
+        state: options.lowValueSuggestion ? 'REJECTED' : 'READY',
         originalText: body.originalText,
-        suggestedText: `${body.originalText}，持续改善交付稳定性`,
-        reason: '保留真实事实，只让职责与结果更清楚。',
-        rejectCode: null,
-        rejectMessage: null,
+        suggestedText: options.lowValueSuggestion
+          ? null
+          : `${body.originalText}，持续改善交付稳定性`,
+        reason: options.lowValueSuggestion ? null : '保留真实事实，只让职责与结果更清楚。',
+        rejectCode: options.lowValueSuggestion ? 'LOW_VALUE_CHANGE' : null,
+        rejectMessage: options.lowValueSuggestion
+          ? '这次改写只产生了很轻微的表达变化，没有足够价值，建议保留原文。'
+          : null,
         modelName: 'workspace-frame-model',
       }),
     )
@@ -401,6 +410,50 @@ test.describe('Workspace editor frame', () => {
 
     await page.getByRole('button', { name: '拒绝' }).click()
     await expect(page.getByText('建议版本', { exact: true })).toBeHidden()
+  })
+
+  test('shows a neutral no-op state for a low-value AI rewrite', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await mockWorkspace(page, { lowValueSuggestion: true })
+    await page.goto('/workspace/42?requirement=3')
+    await page.locator('.bullet-line').first().hover()
+    await page.getByRole('button', { name: 'AI 优化', exact: true }).first().click()
+    await page.getByRole('menuitem', { name: '精简' }).click()
+
+    await expect(page.getByText('这条内容暂时不需要改', { exact: true })).toBeVisible()
+    await expect(page.getByText('这次生成只产生了很轻微的表达变化，没有足够价值，已保留原文。', { exact: true })).toBeVisible()
+    await expect(page.getByText('原因：原文已经比较清楚', { exact: true })).toBeVisible()
+    await expect(page.getByText('建议版本', { exact: true })).toBeHidden()
+    await expect(page.getByRole('button', { name: '采纳', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '换个方向', exact: true })).toBeVisible()
+  })
+
+  test('keeps generic add and delete actions visually aligned on desktop and mobile', async ({
+    page,
+  }) => {
+    await mockWorkspace(page, { longResume: true })
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await page.setViewportSize(viewport)
+      await page.goto('/workspace/42?requirement=3')
+      const entry = page.locator('.editor-entry.is-generic').first()
+      await entry.hover()
+      const add = entry.getByRole('button', { name: '添加内容', exact: true })
+      const remove = entry.getByRole('button', { name: /删除专业经历补充章节 1中的这段内容/ })
+      await expect(add).toBeVisible()
+      await expect(remove).toBeVisible()
+      const [addBox, removeBox] = await Promise.all([add.boundingBox(), remove.boundingBox()])
+      expect(addBox).not.toBeNull()
+      expect(removeBox).not.toBeNull()
+      expect(Math.abs((addBox!.y + addBox!.height / 2) - (removeBox!.y + removeBox!.height / 2))).toBeLessThanOrEqual(2)
+      const metrics = await page.evaluate(() => ({
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+      }))
+      expect(metrics.documentWidth).toBeLessThanOrEqual(metrics.viewportWidth)
+    }
   })
 
   test('deletes a bullet directly and restores it through Undo', async ({ page }) => {

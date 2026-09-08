@@ -191,6 +191,7 @@ describe('ResumeEditor', () => {
 
   it('keeps entry editing direct from the title and confirms destructive deletion', async () => {
     const editWrapper = mount(ResumeEditor, { props: { document: makeDocument() } })
+    expect(editWrapper.get('.entry-delete-action').classes()).toContain('is-heading-delete')
     await editWrapper.get('.entry-title-display').trigger('click')
     expect(editWrapper.get('.entry-inline-editor').exists()).toBe(true)
     expect(editWrapper.text()).not.toContain('编辑详情')
@@ -340,6 +341,8 @@ describe('ResumeEditor', () => {
     expect(wrapper.text()).not.toContain('经历条目')
     expect(wrapper.text()).not.toContain('添加技能要点')
     expect(wrapper.text()).not.toContain('不应出现在技能编辑器里的内容')
+    expect(wrapper.findAll('.editor-entry.is-generic .entry-delete-action.is-inline-delete')).toHaveLength(1)
+    expect(wrapper.find('.editor-entry.is-generic .entry-delete-action.is-heading-delete').exists()).toBe(false)
   })
 
   it('presents generic sections as direct content and preserves bullet identity on edit', async () => {
@@ -412,6 +415,8 @@ describe('ResumeEditor', () => {
     expect(wrapper.text()).not.toContain('经历条目')
     expect(wrapper.text()).not.toContain('不应作为标题展示')
     expect(wrapper.findAll('.entry-document-heading')).toHaveLength(0)
+    expect(wrapper.findAll('.entry-delete-action.is-inline-delete')).toHaveLength(5)
+    expect(wrapper.find('.entry-delete-action.is-heading-delete').exists()).toBe(false)
     expect(wrapper.findAll('.bullet-block')).toHaveLength(5)
 
     const input = wrapper.get('[data-bullet-id="summary-bullet"] textarea')

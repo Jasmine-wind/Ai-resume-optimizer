@@ -25,6 +25,8 @@ const diffSegments = computed(() =>
   props.suggestedText ? diffText(props.originalText, props.suggestedText) : [],
 )
 
+const isLowValueChange = computed(() => props.rejectCode === 'LOW_VALUE_CHANGE')
+
 const rejectReasonLabel = computed(() => {
   switch (props.rejectCode) {
     case 'NEW_TECHNOLOGY':
@@ -50,7 +52,7 @@ const submitCustom = () => {
 </script>
 
 <template>
-  <div :class="['bullet-suggestion', `is-${props.mode}`]">
+  <div :class="['bullet-suggestion', `is-${props.mode}`, { 'is-low-value': isLowValueChange }]">
     <template v-if="props.mode === 'composing'">
       <p class="suggestion-title">告诉 AI 这次想怎么改</p>
       <el-input
@@ -122,6 +124,16 @@ const submitCustom = () => {
       </div>
     </template>
 
+    <template v-else-if="props.mode === 'rejected' && isLowValueChange">
+      <p class="suggestion-title">这条内容暂时不需要改</p>
+      <p class="suggestion-note">这次生成只产生了很轻微的表达变化，没有足够价值，已保留原文。</p>
+      <span class="suggestion-reason-label">原因：原文已经比较清楚</span>
+      <div class="suggestion-actions">
+        <el-button size="small" type="primary" @click="emit('regenerate')">换个方向</el-button>
+        <el-button size="small" text @click="emit('reject')">继续手工编辑</el-button>
+      </div>
+    </template>
+
     <template v-else-if="props.mode === 'rejected'">
       <p class="suggestion-title">这条建议没有通过事实校验</p>
       <p class="suggestion-note">
@@ -157,7 +169,7 @@ const submitCustom = () => {
   background: var(--app-ai-soft);
 }
 
-.bullet-suggestion.is-rejected,
+.bullet-suggestion.is-rejected:not(.is-low-value),
 .bullet-suggestion.is-error {
   border-color: var(--el-color-warning-light-7);
   background: var(--app-warning-soft);
@@ -188,6 +200,10 @@ const submitCustom = () => {
   color: var(--app-warning);
   font-size: 11px;
   font-weight: 700;
+}
+
+.bullet-suggestion.is-low-value .suggestion-reason-label {
+  color: var(--app-text-secondary);
 }
 
 .suggestion-detail {

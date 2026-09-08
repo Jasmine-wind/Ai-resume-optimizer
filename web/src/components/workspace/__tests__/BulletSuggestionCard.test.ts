@@ -65,7 +65,27 @@ describe('BulletSuggestionCard', () => {
     expect(wrapper.text()).toContain('负责订单服务开发，并使用 Kafka 处理异步消息')
     expect(wrapper.text()).toContain('差异')
     expect(wrapper.get('button').text()).toBe('确认并采纳')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.emitted('apply')).toHaveLength(1)
     expect(wrapper.text()).not.toContain('没有通过事实校验')
+  })
+
+  it('hides Apply when the candidate is stale', () => {
+    const wrapper = mount(BulletSuggestionCard, {
+      props: {
+        mode: 'stale',
+        originalText: '负责订单服务开发',
+        suggestedText: '负责订单服务开发，并使用 Kafka 处理异步消息',
+        reason: '补充技术描述，请确认真实性。',
+      },
+      global: { stubs: { ElButton } },
+    })
+
+    expect(wrapper.text()).toContain('这条建议已失效')
+    expect(wrapper.findAll('.suggestion-actions button').map((button) => button.text())).toEqual([
+      '重新生成',
+      '关闭',
+    ])
   })
 
   it('shows original, suggested expression, deterministic diff and apply action together', async () => {

@@ -228,7 +228,7 @@ onMounted(load)
 
     <template v-else>
       <section class="settings-content-heading">
-        <p class="settings-section-label">高级能力</p>
+        <p class="settings-section-label">AI 配置</p>
         <h2>AI 设置</h2>
         <p>开始岗位分析前，请先配置并启用你自己的 API 密钥。</p>
         <RouterLink v-if="hasRedirect" class="settings-return-link" :to="redirectPath">返回开始优化</RouterLink>
@@ -254,9 +254,9 @@ onMounted(load)
 
       <section class="settings-configuration" aria-labelledby="custom-ai-title">
         <header class="settings-section-header">
-          <p class="settings-section-label">高级设置</p>
+          <p class="settings-section-label">连接设置</p>
           <h2 id="custom-ai-title">使用自己的 API</h2>
-          <p>可选配置。适用于兼容 OpenAI 接口的服务；密钥不会在页面回显。</p>
+          <p>配置并启用兼容 OpenAI 接口的 API 后，即可使用岗位分析和 AI 优化；密钥不会在页面回显。</p>
         </header>
 
         <p v-if="configured" class="settings-current-key">

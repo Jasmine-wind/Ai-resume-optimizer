@@ -15,8 +15,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class BulletRewritePromptServiceImpl implements BulletRewritePromptService {
 
-    private static final String SYSTEM_TEMPLATE_PATH = "prompts/bullet-rewrite-system-v1.md";
-    private static final String USER_TEMPLATE_PATH = "prompts/bullet-rewrite-v1.md";
+    private static final String SYSTEM_TEMPLATE_PATH = "prompts/bullet-rewrite-system-v2.md";
+    private static final String USER_TEMPLATE_PATH = "prompts/bullet-rewrite-v2.md";
     private static final int MAX_REQUIREMENT_CONTEXT_LENGTH = 6000;
     private static final int MAX_ORIGINAL_TEXT_LENGTH = 4000;
     private static final int MAX_INSTRUCTION_LENGTH = 500;

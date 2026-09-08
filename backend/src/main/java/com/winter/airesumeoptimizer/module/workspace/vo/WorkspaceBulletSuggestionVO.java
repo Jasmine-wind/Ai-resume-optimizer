@@ -27,6 +27,9 @@ public class WorkspaceBulletSuggestionVO {
     /** 拒绝码：AI 明确拒绝或疑似拒绝话术。 */
     public static final String REJECT_CODE_REFUSED = "AI_REFUSED";
 
+    /** 拒绝码：改写通过事实校验但没有足够可辨认的表达价值。 */
+    public static final String REJECT_CODE_LOW_VALUE_CHANGE = "LOW_VALUE_CHANGE";
+
     @Schema(description = "客户端生成的请求 UUID，原样回传")
     private String requestId;
 
@@ -48,7 +51,7 @@ public class WorkspaceBulletSuggestionVO {
     @Schema(description = "AI 给出的修改原因；REJECTED 时为 null")
     private String reason;
 
-    @Schema(description = "拒绝码：事实校验违规类型或 AI_REFUSED；READY 时为 null")
+    @Schema(description = "拒绝码：事实校验违规类型、AI_REFUSED 或 LOW_VALUE_CHANGE；READY 时为 null")
     private String rejectCode;
 
     @Schema(description = "面向用户的拒绝说明；READY 时为 null")

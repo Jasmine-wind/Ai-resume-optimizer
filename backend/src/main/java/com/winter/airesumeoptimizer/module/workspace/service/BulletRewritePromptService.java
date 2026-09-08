@@ -13,7 +13,7 @@ import com.winter.airesumeoptimizer.module.workspace.enums.BulletSuggestIntent;
  */
 public interface BulletRewritePromptService {
 
-    String PROMPT_VERSION = "bullet_rewrite_v1";
+    String PROMPT_VERSION = "bullet_rewrite_v2";
 
     BulletRewritePromptDTO buildPrompt(
             BulletSuggestIntent intent,

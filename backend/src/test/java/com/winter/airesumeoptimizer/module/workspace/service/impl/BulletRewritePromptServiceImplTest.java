@@ -22,6 +22,28 @@ class BulletRewritePromptServiceImplTest {
             new BulletRewritePromptServiceImpl(new PromptTemplateService());
 
     @Test
+    void v2PromptShouldRequireMaterialRewriteAndGroundReasonsInActualChanges() {
+        BulletRewritePromptDTO prompt = service.buildPrompt(
+                BulletSuggestIntent.JOB_TARGETED, null, "负责订单服务开发", evidenceAnalysis());
+
+        assertThat(prompt.getPromptVersion()).isEqualTo("bullet_rewrite_v2");
+        assertThat(prompt.getSystemPolicy()).contains("不要为了生成结果而生成结果");
+        assertThat(prompt.getSystemPolicy()).contains("只增加“并 / 且 / 并且 / 以及”等连接词");
+        assertThat(prompt.getSystemPolicy()).contains("reason 必须对应");
+        assertThat(prompt.getSystemPolicy()).contains("当前表述已经清楚，没有足够有价值的改写");
+    }
+
+    @Test
+    void systemPolicyKeepsOriginalBulletAsOnlyFactClosure() {
+        BulletRewritePromptDTO prompt = service.buildPrompt(
+                BulletSuggestIntent.JOB_TARGETED, null, "负责订单服务开发", evidenceAnalysis());
+
+        assertThat(prompt.getSystemPolicy()).contains("事实闭包 = 被改写要点的原文");
+        assertThat(prompt.getUserContent()).contains("被改写要点原文（事实闭包");
+        assertThat(prompt.getUserContent()).doesNotContain("Kafka 消息队列经验");
+    }
+
+    @Test
     void systemPolicyShouldCarryPlatformConstraintsOnly() {
         BulletRewritePromptDTO prompt = service.buildPrompt(
                 BulletSuggestIntent.JOB_TARGETED, null, "负责订单服务开发", evidenceAnalysis());

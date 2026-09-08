@@ -108,6 +108,37 @@ class BulletRewriteServiceImplTest {
     }
 
     @Test
+    void lowValueConnectorChangeShouldBeRejectedAsNeutralResult() {
+        String original = "设计统一订单状态机，落地分布式事务方案";
+        when(workspaceContentService.getContent(USER_ID, TASK_ID)).thenReturn(content(REVISION, original));
+        when(aiClientService.complete(any(List.class))).thenReturn(
+                "{\"suggestedText\":\"设计统一订单状态机，并落地分布式事务方案\",\"reason\":\"调整句式使两个动作衔接更自然\"}");
+
+        WorkspaceBulletSuggestionVO result = service.suggestBulletRewrite(
+                USER_ID, TASK_ID, requestForText(original, BulletSuggestIntent.JOB_TARGETED, null));
+
+        assertThat(result.getState()).isEqualTo(WorkspaceBulletSuggestionVO.STATE_REJECTED);
+        assertThat(result.getRejectCode()).isEqualTo(WorkspaceBulletSuggestionVO.REJECT_CODE_LOW_VALUE_CHANGE);
+        assertThat(result.getRejectMessage()).isEqualTo(
+                "这次改写只产生了很轻微的表达变化，没有足够价值，建议保留原文。");
+        assertThat(result.getSuggestedText()).isNull();
+    }
+
+    @Test
+    void factChangeMustStillBeRejectedByFactValidator() {
+        String original = "参与订单服务开发";
+        when(workspaceContentService.getContent(USER_ID, TASK_ID)).thenReturn(content(REVISION, original));
+        when(aiClientService.complete(any(List.class))).thenReturn(
+                "{\"suggestedText\":\"主导订单服务开发\",\"reason\":\"突出职责\"}");
+
+        WorkspaceBulletSuggestionVO result = service.suggestBulletRewrite(
+                USER_ID, TASK_ID, requestForText(original, BulletSuggestIntent.TECHNICAL_DEPTH, null));
+
+        assertThat(result.getState()).isEqualTo(WorkspaceBulletSuggestionVO.STATE_REJECTED);
+        assertThat(result.getRejectCode()).isEqualTo("RESPONSIBILITY_ESCALATION");
+    }
+
+    @Test
     void suggestShouldRejectStaleBaseRevision() {
         when(workspaceContentService.getContent(USER_ID, TASK_ID)).thenReturn(content(REVISION + 1, ORIGINAL_TEXT));
 

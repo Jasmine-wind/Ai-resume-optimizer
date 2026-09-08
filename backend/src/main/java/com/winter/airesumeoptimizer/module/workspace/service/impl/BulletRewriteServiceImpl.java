@@ -26,6 +26,7 @@ import com.winter.airesumeoptimizer.module.workspace.service.BulletRewritePrompt
 import com.winter.airesumeoptimizer.module.workspace.service.BulletRewriteRefusedException;
 import com.winter.airesumeoptimizer.module.workspace.service.BulletRewriteService;
 import com.winter.airesumeoptimizer.module.workspace.service.RewriteFactValidator;
+import com.winter.airesumeoptimizer.module.workspace.service.RewriteMaterialityGate;
 import com.winter.airesumeoptimizer.module.workspace.service.WorkspaceContentService;
 import com.winter.airesumeoptimizer.module.optimization.service.OptimizationTaskService;
 import com.winter.airesumeoptimizer.module.workspace.vo.WorkspaceBulletSuggestionVO;
@@ -54,6 +55,7 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
     private final BulletRewritePromptService bulletRewritePromptService;
     private final BulletRewriteOutputParser bulletRewriteOutputParser;
     private final RewriteFactValidator rewriteFactValidator;
+    private final RewriteMaterialityGate rewriteMaterialityGate;
     private final AiGateway aiGateway;
     private final OptimizationTaskService optimizationTaskService;
 
@@ -70,6 +72,7 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
                 bulletRewritePromptService,
                 bulletRewriteOutputParser,
                 rewriteFactValidator,
+                new RewriteMaterialityGateImpl(),
                 aiGateway,
                 null);
     }
@@ -81,6 +84,7 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
             BulletRewritePromptService bulletRewritePromptService,
             BulletRewriteOutputParser bulletRewriteOutputParser,
             RewriteFactValidator rewriteFactValidator,
+            RewriteMaterialityGate rewriteMaterialityGate,
             AiGateway aiGateway,
             OptimizationTaskService optimizationTaskService) {
         this.workspaceContentService = workspaceContentService;
@@ -88,6 +92,7 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
         this.bulletRewritePromptService = bulletRewritePromptService;
         this.bulletRewriteOutputParser = bulletRewriteOutputParser;
         this.rewriteFactValidator = rewriteFactValidator;
+        this.rewriteMaterialityGate = rewriteMaterialityGate;
         this.aiGateway = aiGateway;
         this.optimizationTaskService = optimizationTaskService;
     }
@@ -194,6 +199,13 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
             return rejected(request, currentRevision, persistedOriginal,
                     factCheck.code().name(),
                     factCheck.message() + "，建议已拒绝，请继续手工编辑");
+        }
+
+        if (rewriteMaterialityGate.isLowValueChange(persistedOriginal, output.suggestedText())) {
+            log.info("Bullet rewrite rejected as low-value change: optimizationTaskId={}", optimizationTaskId);
+            return rejected(request, currentRevision, persistedOriginal,
+                    WorkspaceBulletSuggestionVO.REJECT_CODE_LOW_VALUE_CHANGE,
+                    "这次改写只产生了很轻微的表达变化，没有足够价值，建议保留原文。");
         }
 
         return WorkspaceBulletSuggestionVO.builder()

@@ -17,7 +17,7 @@
 | Phase 9 | 已完成，Final Gate PASS | 只读 Multi-JD Insight、最小 committed-fact Observability、Usage hardening/retention、PostgreSQL/Flyway + MinIO lifecycle + fake Provider + Playwright recovery E2E，以及非生产普通 User Demo 环境 |
 | Product Polish Slice C | 已完成，Final Gate PASS | Typst v3 三模板语义层级、字体/长字段/分页质量回归、Preview title seam、英文/中英混排与真实风格 JD fixtures；未改变 V1 SoT、业务协议或 IA |
 
-Phase 1–8 的冻结语义（Evidence 三态、Rewrite 事实闭包、Preview / Export 只读 seam、Workspace CAS 与 Suggest 会话生命周期）保持不变。Phase 9 已通过独立 Final Gate；Phase 1–9 均正式完成，且未批准或创建 Phase 10。
+Phase 1–8 的冻结语义（Evidence 三态、Rewrite 技术安全校验与事实 review advisory、Preview / Export 只读 seam、Workspace CAS 与 Suggest 会话生命周期）保持不变。Phase 9 已通过独立 Final Gate；Phase 1–9 均正式完成，且未批准或创建 Phase 10。
 
 Phase 9 之后进入 Product Polish，不新建 Phase。Slice A（已完成）冻结了可信交付链：原始简历 → 候选解析 → 确定性验证 → `READY / NEEDS_REVIEW / FAILED` → canonical `RESUME_DOCUMENT_V1` → Workspace → Preview / PDF。候选解析不是事实；无法可靠判断的内容进入未决候选由用户确认，AI 不得为修解析补造事实，无法裁决时 fail closed。
 
@@ -97,7 +97,7 @@ Preview 与 Export 是同步渲染：只读取服务端已保存的 TARGET `stru
 
 - MATCHED 表示冻结材料足以支持完整要求；PARTIAL_EVIDENCE 表示存在直接相关但不完整的材料证据；NO_EVIDENCE 只表示当前材料未找到证据，不代表用户没有该能力。
 - Requirement 必须来自冻结 JD；MATCHED / PARTIAL_EVIDENCE 必须保留逐字命中冻结 SOURCE ResumeVersion 且与要求相关的 Evidence；无有效 Evidence 时必须降级为 NO_EVIDENCE，且 NO_EVIDENCE 不保存 Evidence。
-- PARTIAL_EVIDENCE 不授权 AI 补全技能、经历、数字或成果。新增事实只能来自用户补充 / 确认或独立事实来源；该确认交互当前尚未实现。
+- PARTIAL_EVIDENCE 不改变 Evidence 语义。Rewrite 可以提出技能、经历、数字或成果候选，但必须以 review advisory 提醒用户确认；用户显式 Apply 前不写入，且不修改 Evidence。
 - Resume 和 JD 都是不可信输入，不能覆盖平台指令、Schema、权限或真实性约束；AI 输出必须经过受控 DTO / Schema 解析和代码校验后才能进入业务流程。
 
 ### Workspace 与 Phase 5
@@ -109,7 +109,7 @@ Preview 与 Export 是同步渲染：只读取服务端已保存的 TARGET `stru
 - Undo / Redo 只属于当前页面会话；刷新后只恢复最后成功保存的服务端内容；localStorage / sessionStorage 不是正式简历内容恢复源。
 - AI Suggest 只处理用户明确选中的单个 Bullet。平台策略进入 SYSTEM，简历、JD、Evidence 和本次要求进入标记为不可信的 USER 数据区；Prompt 使用单遍模板替换。
 - Suggestion 只存在于当前前端会话，服务端只读生成且没有服务端 Apply。Suggest / Reject / Regenerate 不修改 TARGET 或 revision。
-- 事实闭包只以当前 Bullet 原文为基线，不跨 Bullet 或从 SOURCE / Evidence 搬运新事实。新增或升级技术、实体、数字、量化、责任级别、成果、因果、范围或时间必须拒绝；无法可靠判断时 fail closed。
+- `RewriteFactValidator` 只以当前 Bullet 原文为审查基线，不跨 Bullet 或从 SOURCE / Evidence 搬运事实。新增或升级技术、实体、数字、量化、责任级别、成果、因果、范围或时间返回 `reviewCode` / `reviewMessage` advisory，并不拒绝；空值、超长、malformed / refusal、内部身份泄露、不可见控制字符、不支持脚本等技术问题仍 fail closed。
 - 候选绑定 requestId、baseRevision、草稿变更序号、bulletId 和原文哈希。人工编辑、Undo / Redo、Restore、revision 变化、冲突、任务切换、Regenerate 替代或乱序响应都会使候选失效。
 - Apply 必须由用户显式触发并再次验证候选，只替换对应 Bullet，形成一个 Undo 节点，然后进入既有 dirty → Auto Save → CAS；不得绕过 Phase 4 并发协议。
 
@@ -141,8 +141,8 @@ Phase 1–9 已正式完成；后续能力仍须依 `PLAN.md` 和新的产品决
 - 正式 Evidence 目前只保存 SOURCE 版本、section label 和逐字 quote，没有 Workspace 元素 ID 或字符范围。当前单 Bullet 手动选择绕开了该缺口，但可靠的“查看原文”、从建议跳转到编辑位置和更细来源追踪仍缺正式锚点模型。
 - 正式证据分析依赖 JD 结构化解析质量；解析失败或信息不足时只能返回少量要求或整体失败，不能猜测补全。推理型模型还需要足够输出 token，切换模型或 Provider 时必须重新验证额度。
 - 旧表、接口和服务仍被解析、历史读取、删除和兼容重试依赖，当前不能直接删除。删除 Resume / JobDescription 的级联影响和可能残留的源快照仍需在统一数据生命周期阶段核对。
-- RewriteFactValidator 已从有限危险词拒绝收紧为保守的可证明安全子集：完整 Latin token、数字—单位—对象关系、否定极性、能力程度、责任层级、成果 / 因果、时间 / 范围、Unicode 控制字符及未知中文事实片段无法由当前 Bullet 原文确定支持时一律拒绝。该实现有意允许误拒，用户仍可手工编辑；不得用第二次 LLM、Embedding 或相似度判断放宽真实性门禁。
-- AI Suggest 是同步请求，当前无限流；服务端 AI 默认超时 30 秒、前端请求超时 65 秒。生成窗口内的并发编辑通过候选失效和 CAS 防止落库覆盖，但后续运维仍可评估频控。
+- RewriteFactValidator 现为内容 review detector 与技术安全检查：完整 Latin token、数字—单位—对象关系、否定极性、能力程度、责任层级、成果 / 因果、时间 / 范围及未知中文事实片段会生成 advisory，交由用户确认；Unicode 控制字符、未知脚本、内部身份泄露、空值与超长输出仍 hard reject。不得用第二次 LLM、Embedding 或相似度判断替代技术安全门。
+- AI Suggest 是同步请求，当前无限流；服务端 AI 默认超时 30 秒、前端请求超时 65 秒。事实变化不会隐藏候选或阻止 Apply；Apply 仍是用户显式操作并继续经过 Undo、Autosave 与 CAS。生成窗口内的并发编辑通过候选失效和 CAS 防止落库覆盖，但后续运维仍可评估频控。
 - 首页进行中的任务仍可通过会话引用恢复；已完成的任务由 Home 最近优化列表按 updatedAt / id 倒序展示，可跨设备继续成功任务或重试失败任务。
 - 前端主 chunk 曾超过 Vite 500 kB 提示阈值；Phase 8 已通过 Element Plus 按需引入 + 路由懒加载消除（入口 chunk 约 160 kB，组件样式随路由分块加载）。
 - 结构化编辑器曾因对响应式 Proxy 调用 structuredClone 导致手工编辑崩溃；已改为与 useWorkspaceEditor 一致的 JSON 克隆并有组件回归测试。

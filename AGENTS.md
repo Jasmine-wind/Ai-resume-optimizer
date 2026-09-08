@@ -52,8 +52,8 @@ Database changes use Flyway migrations under `backend/src/main/resources/db/migr
 Preserve these invariants:
 
 - Queries and file access enforce current-user resource ownership.
-- AI output is untrusted until parsed and validated.
-- AI may not invent user facts.
+- AI output is untrusted until parsed and technically validated.
+- AI Suggest may propose unconfirmed candidate content, but it must not be treated as a user fact or written automatically; explicit user Apply is required.
 - Redis is not the sole source of business truth.
 - Storage access goes through the storage abstraction.
 - Logs and client errors do not expose credentials or raw provider secrets.

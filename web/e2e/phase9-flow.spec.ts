@@ -344,6 +344,8 @@ test('workspace conflict preserves the local draft; stale Preview and Suggest ca
           // is exercised without changing the deterministic backend contract.
           suggestedText: '负责 Java 后端服务开发并持续迭代',
           reason: '测试候选',
+          reviewCode: null,
+          reviewMessage: null,
           rejectCode: null,
           rejectMessage: null,
           modelName: 'test-model',

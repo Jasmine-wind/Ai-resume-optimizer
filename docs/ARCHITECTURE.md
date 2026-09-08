@@ -45,7 +45,7 @@ scripts/  生产运维脚本
 - `job`：预置岗位、用户目标 JD、岗位解析和旧匹配。
 - `analysis`：诊断、优化建议、局部改写和聚合报告；旧 AI 匹配仍在其中，公开写入口已停用，仅服务历史兼容读取，不再是主链路正式结果。
 - `optimization`：`ResumeVersion`、`JobTarget`、`OptimizationTask`，负责版本派生、输入与配置快照、任务归属和正式结果入口。
-- `workspace`：Phase 4 优化工作区与 Phase 5 单 Bullet AI Suggest；以 `optimizationTaskId` 为唯一入口解析任务版本链，提供 TARGET 岗位版本的结构化简历文档读取、基于 `content_revision` 乐观并发的条件保存与恢复优化前版本，以及只读生成、事实闭包校验和会话内显式采纳。
+- `workspace`：Phase 4 优化工作区与 Phase 5 单 Bullet AI Suggest；以 `optimizationTaskId` 为唯一入口解析任务版本链，提供 TARGET 岗位版本的结构化简历文档读取、基于 `content_revision` 乐观并发的条件保存与恢复优化前版本，以及只读生成、技术安全校验、事实审查 advisory 和会话内显式采纳。
 - `export`：Phase 6 PDF Preview / Export；只读取至少完成一次 CAS Save 的 TARGET `RESUME_DOCUMENT_V1`（Slice A 为其增加语义字段，历史 generic 形态只读升级），生成带实际 preflight 和签名 receipt 的 PDF Preview；Export 验证 receipt 完整绑定并通过文档 / PDF 两层质量门后创建私有 `ExportArtifact`，并维护 READY / DELETE_PENDING 可重试生命周期。
 - `evidence`：Phase 3 正式 Evidence Matching 与 Gap Analysis；岗位要求、简历证据与匹配结论的正式 Source of Truth。
 - `embedding`：文本分块、向量生成、相似度与 RAG 上下文；当前不进入正式证据匹配主链路。
@@ -69,7 +69,7 @@ scripts/  生产运维脚本
 → 失败时按 OptimizationTask 重试，复用已保存输入且不创建新版本；成功任务不可重试改写；重试会整体替换旧的正式分析行
 → 岗位分析结果页只通过 OptimizationTask 读取正式证据分析；历史任务无正式分析时兼容读取旧匹配结果
 → 任务成功后可进入优化工作区：服务端把冻结解析快照转换为结构化简历文档，用户对 TARGET 岗位版本做 Section / Bullet 编辑、排序与恢复优化前版本，自动保存以 content_revision 条件更新落库
-→ 用户可对明确选中的单个 Bullet 请求只读 AI Suggest；候选经事实闭包校验后展示代码 Diff，显式 Apply 才进入既有 Undo / Auto Save / CAS
+→ 用户可对明确选中的单个 Bullet 请求只读 AI Suggest；候选经严格解析与技术安全校验后展示代码 Diff，事实变化以 review advisory 提醒，显式 Apply 才进入既有 Undo / Auto Save / CAS
 → 保存成功后可在 Preview / Export 中选择内置模板，同步渲染服务端已保存内容得到 PDF；导出成功后生成带归属与生命周期记录的导出物
 ```
 
@@ -82,8 +82,8 @@ scripts/  生产运维脚本
 重要边界：
 
 - 岗位库、目标岗位管理、技术分类式 AI 历史和旧匹配编排页面已退出前端路由。`job_descriptions`、`ai_job_match_results`、旧服务与旧接口仍供解析与兼容读取；正式主链路不再写入新的旧匹配行，也不用其 ID 作为前端路由或重试身份。
-- AI 输出通过受控 DTO / Schema 解析后持久化；不能把模型原文直接当可信业务数据。MATCHED / PARTIAL_EVIDENCE 都必须有逐字命中冻结 ResumeVersion 且与 Requirement 相关的 Evidence；失去全部有效 Evidence 时强制降级为 NO_EVIDENCE，NO_EVIDENCE 不保存 Evidence。
-- PARTIAL_EVIDENCE 只表示当前材料的证据不完整，不授权后续 AI 增加材料中不存在的能力、技术、数字或成果；真正判断“有经历但没有写出来”需要用户补充 / 确认或独立事实来源，不在 Phase 3 实现。
+- AI 输出通过受控 DTO / Schema 解析后才能进入业务流程；单 Bullet Suggest 只在会话中展示，不把模型原文直接当可信业务数据。MATCHED / PARTIAL_EVIDENCE 都必须有逐字命中冻结 ResumeVersion 且与 Requirement 相关的 Evidence；失去全部有效 Evidence 时强制降级为 NO_EVIDENCE，NO_EVIDENCE 不保存 Evidence。
+- PARTIAL_EVIDENCE 只表示当前材料的证据不完整，不改变 Evidence 语义。Rewrite 可以提出材料中没有明确写出的候选，但必须以 review advisory 提示用户确认，不得伪造 Evidence 或自动写入。
 - 优化报告聚合已有结果，不为补全报告再次调用 AI。
 - Redis 只缓存可重新生成内容，不承担唯一业务状态。
 - 文件访问经过后端鉴权；MinIO bucket 不作为公开下载入口。
@@ -113,7 +113,7 @@ Phase 2 已完成核心领域模型和主链路迁移。Phase 3 已把 Evidence 
 已完成：Resume / ResumeVersion / JobTarget / OptimizationTask
       Evidence Mapping / Gap Analysis（正式结果与追溯模型）
       Workspace / Editor（结构化简历编辑、自动保存与恢复优化前版本）
-      单 Bullet AI Suggest / Diff / Apply / Reject / Regenerate（事实闭包与严格解析，Gate 已通过）
+      单 Bullet AI Suggest / Diff / Apply / Reject / Regenerate（严格解析、技术安全校验与事实 review advisory，Gate 已通过）
       Typst Preview / ExportArtifact（签名 Preview receipt、preflight、可重试生命周期，Gate 已通过）
       AI Gateway / Provider Credential（唯一 Chat seam、BYOK 加密与 SSRF 防护，Final Gate 已通过）
       视觉与状态体验统一（Phase 8 独立 Final Gate 已通过）
@@ -124,7 +124,7 @@ Phase 2 已完成核心领域模型和主链路迁移。Phase 3 已把 Evidence 
 
 1. **先收敛用户链路，再迁移内部模型**；不得先把 Provider、Prompt、Embedding、Task 暴露给普通用户。
 2. **原始简历、原始 JD 与用户修改可追溯**；岗位版本不得静默污染原简历。
-3. **事实约束先于生成能力**；当前材料的证据强度与用户现实能力必须明确分开，未获用户确认或独立事实来源支持时不得推断现实能力。
+3. **事实审查与技术安全先于生成落库**；当前材料的 Evidence 强度与用户现实能力必须明确分开。Rewrite 可提出候选，未获用户显式 Apply 前不得写入；原文未出现的信息通过 review advisory 提醒确认。
 4. **所有资源显式归属用户**；查询至少包含 `current_user + resource_id`。
 5. **OptimizationTask 保存输入和配置快照**；后续配置变化不得改写历史解释。
 6. **Structured Resume JSON 是编辑和导出的业务数据源**；Typst 只是输出基础设施。

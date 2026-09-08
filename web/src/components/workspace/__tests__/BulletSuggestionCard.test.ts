@@ -11,21 +11,22 @@ const ElButton = {
 }
 
 describe('BulletSuggestionCard', () => {
-  it('explains a fact-check rejection and keeps both next steps visible', () => {
+  it('uses a technical failure message without presenting content changes as errors', () => {
     const wrapper = mount(BulletSuggestionCard, {
       props: {
         mode: 'rejected',
         originalText: '参与 Redis 优化。',
-        rejectCode: 'NEW_TECHNOLOGY',
-        rejectMessage: '改写引入了原文没有的技术名称',
+        rejectCode: 'CONTROL_CHARACTER',
+        rejectMessage: 'AI 改写包含不可见格式控制字符',
       },
       global: { stubs: { ElButton } },
     })
 
-    expect(wrapper.text()).toContain('这条建议没有通过事实校验')
-    expect(wrapper.text()).toContain('引入原文没有的信息')
+    expect(wrapper.text()).toContain('这条建议暂时不可用')
+    expect(wrapper.text()).toContain('处理说明')
     expect(wrapper.text()).toContain('重新生成建议')
     expect(wrapper.text()).toContain('继续手工编辑')
+    expect(wrapper.text()).not.toContain('没有通过事实校验')
   })
 
   it('shows a neutral low-value result without diff or apply actions', () => {
@@ -45,6 +46,26 @@ describe('BulletSuggestionCard', () => {
     expect(wrapper.text()).not.toContain('采纳')
     expect(wrapper.text()).toContain('换个方向')
     expect(wrapper.get('.bullet-suggestion').classes()).toContain('is-low-value')
+  })
+
+  it('shows a content review advisory while keeping the candidate applyable', async () => {
+    const wrapper = mount(BulletSuggestionCard, {
+      props: {
+        mode: 'ready',
+        originalText: '负责订单服务开发',
+        suggestedText: '负责订单服务开发，并使用 Kafka 处理异步消息',
+        reason: '补充 Kafka 相关技术描述；原文未包含该信息，请确认真实性。',
+        reviewCode: 'NEW_TECHNOLOGY',
+        reviewMessage: '建议包含原文未写明的信息，请确认这些内容确实属于你的真实经历。',
+      },
+      global: { stubs: { ElButton } },
+    })
+
+    expect(wrapper.text()).toContain('请确认内容真实')
+    expect(wrapper.text()).toContain('负责订单服务开发，并使用 Kafka 处理异步消息')
+    expect(wrapper.text()).toContain('差异')
+    expect(wrapper.get('button').text()).toBe('确认并采纳')
+    expect(wrapper.text()).not.toContain('没有通过事实校验')
   })
 
   it('shows original, suggested expression, deterministic diff and apply action together', async () => {

@@ -11,7 +11,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * 事实闭包校验：允许同义改写与语言重组，拒绝任何事实扩张；无法确定时 fail closed。
+ * 内容审查：识别事实变化供 advisory 使用；技术安全输出仍 fail closed。
  */
 class RewriteFactValidatorImplTest {
 
@@ -390,13 +390,36 @@ class RewriteFactValidatorImplTest {
     }
 
     @Test
-    void shouldRejectElementIdentityLeak() {
+    void shouldClassifyElementIdentityLeakAsTechnicalSafetyFailure() {
         RewriteFactValidationResult result = validate(
                 "负责订单服务开发",
                 "负责订单服务开发 b-12");
 
         assertThat(result.passed()).isFalse();
         assertThat(result.code()).isEqualTo(RewriteFactViolationCode.ELEMENT_IDENTITY_LEAK);
+        assertThat(result.code().isTechnicalSafetyFailure()).isTrue();
+    }
+
+    @Test
+    void shouldRejectControlCharacterAsTechnicalSafetyFailure() {
+        RewriteFactValidationResult result = validate(
+                "负责订单服务开发",
+                "负责订单服务开发\u200B");
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.code()).isEqualTo(RewriteFactViolationCode.CONTROL_CHARACTER);
+        assertThat(result.code().isTechnicalSafetyFailure()).isTrue();
+    }
+
+    @Test
+    void shouldRejectUnsupportedScriptAsTechnicalSafetyFailure() {
+        RewriteFactValidationResult result = validate(
+                "负责订单服务开发",
+                "负责订单服务开发 Яндекс");
+
+        assertThat(result.passed()).isFalse();
+        assertThat(result.code()).isEqualTo(RewriteFactViolationCode.UNSUPPORTED_SCRIPT);
+        assertThat(result.code().isTechnicalSafetyFailure()).isTrue();
     }
 
     @Test

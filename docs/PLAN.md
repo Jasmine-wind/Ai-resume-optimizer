@@ -60,11 +60,11 @@
 
 - 建立岗位要求与当前冻结 ResumeVersion 证据的映射。
 - 区分“当前材料足够支持”“当前材料只有部分证据”“当前材料未找到支持证据”。
-- 无证据内容不得进入后续自动改写。
+- 无证据内容不得自动写入简历；后续 AI Suggest 如参考能力缺口，只能作为明确标注的候选并等待用户显式确认。
 
-门禁：每条可修改建议都有来源；能力缺口不会被 AI 强行写入简历。
+门禁：正式 Evidence 不替候选补全事实；能力缺口不会被 AI 自动写入简历。
 
-完成状态：正式分析结果以每个 OptimizationTask 一条 `evidence_analyses` 及其 `evidence_requirements` / `requirement_evidences` 行为 Source of Truth，V20 新建正式表，V20.1 原位移除 EXPRESSION_GAP / expression_status 错误语义并将旧正式派生结果安全失效供重试；V1 历史数据不变。Requirement 必须回溯到冻结 JD；MATCHED / PARTIAL_EVIDENCE 必须有逐字命中冻结 ResumeVersion 且与要求相关的 Evidence，NO_EVIDENCE 不得保存 Evidence。PARTIAL_EVIDENCE 不代表用户现实中具有未被材料证明的经历，也不授权后续 AI 新增事实。失败重试保留冻结输入，正式结果与任务成功状态原子提交。匹配策略位于 `EvidenceMatchingStrategy` interface 之后，不依赖 Embedding / RAG；结果页使用“已有优势 / 建议完善 / 当前材料未体现”并保留历史 V1 兼容读取；Workspace、AI Rewrite、Diff、Typst 未在 Phase 3 中实现。
+完成状态：正式分析结果以每个 OptimizationTask 一条 `evidence_analyses` 及其 `evidence_requirements` / `requirement_evidences` 行为 Source of Truth，V20 新建正式表，V20.1 原位移除 EXPRESSION_GAP / expression_status 错误语义并将旧正式派生结果安全失效供重试；V1 历史数据不变。Requirement 必须回溯到冻结 JD；MATCHED / PARTIAL_EVIDENCE 必须有逐字命中冻结 ResumeVersion 且与要求相关的 Evidence，NO_EVIDENCE 不得保存 Evidence。PARTIAL_EVIDENCE 不代表用户现实中具有未被材料证明的经历，也不改变 Evidence 语义；Rewrite 只能提出 review advisory 候选，不能自动写入或伪造 Evidence。失败重试保留冻结输入，正式结果与任务成功状态原子提交。匹配策略位于 `EvidenceMatchingStrategy` interface 之后，不依赖 Embedding / RAG；结果页使用“已有优势 / 建议完善 / 当前材料未体现”并保留历史 V1 兼容读取；Workspace、AI Rewrite、Diff、Typst 未在 Phase 3 中实现。
 
 Gate 结论：当前正式三态只陈述冻结材料可以支持的结论；引用真实性、用户归属、无证据降级、旧写入口、重试与结果原子性均已验证。真正的“有经历但没有写出来”明确留给未来用户确认或独立事实来源，不是 Phase 3 的隐含能力。
 
@@ -83,11 +83,11 @@ Gate 结论：当前正式三态只陈述冻结材料可以支持的结论；引
 - 只组合平台真实性约束、系统默认策略与本次 request-scoped 要求。
 - 用户 Profile / Rules 属于后续 P1，不在 Phase 5 范围；默认流程不暴露高级设置。
 
-门禁：所有 AI 修改可审查、可撤销、可追溯且通过事实校验。
+门禁：所有 AI 修改可审查、可撤销、可追溯；技术安全问题 fail closed，内容事实变化以用户可见的 review advisory 提示，不阻止 READY / Apply。
 
-完成状态：单 Bullet 岗位定向改写以 `POST /api/workspace/{optimizationTaskId}/bullet-suggestion` 为唯一入口，完全只读、不落库：请求绑定 requestId、baseRevision、bulletId 精确身份与原文 SHA-256；服务端复用 Phase 4 任务版本链解析，无正式证据分析的旧版兼容任务 fail closed。平台真实性策略进 SYSTEM 消息，简历 / 岗位 / 用户要求等不可信数据进 USER 数据区；Prompt 模板单遍替换。AI 输出只接受字段完整、无重复 / 未知字段、无前后包装或 trailing token 的单一 JSON；`reason` 必须是非空字符串。建议文本随后经确定性事实闭包校验器审查，事实基线只有当前 Bullet 原文；完整 token、数字与对象关系、否定极性、程度、责任、实体、成果 / 因果、时间 / 范围及 Unicode 绕过无法确定安全时一律拒绝，仅放行可由原文证明的有限表达优化。NO_EVIDENCE 要求不进入改写上下文；PARTIAL_EVIDENCE 只作为表达侧重参考，不得补成完整能力。Diff 由前端代码确定性生成。建议只存在于当前会话：Suggest / Reject / Regenerate 不修改草稿与服务端；Apply 必须显式点击并重新验证候选有效，只替换对应 Bullet，形成单个 Undo 节点后进入既有 dirty → Auto Save → CAS。用户 Profile / Rules 高级分层仍未实现。
+完成状态：单 Bullet 岗位定向改写以 `POST /api/workspace/{optimizationTaskId}/bullet-suggestion` 为唯一入口，完全只读、不落库：请求绑定 requestId、baseRevision、bulletId 精确身份与原文 SHA-256；服务端复用 Phase 4 任务版本链解析，无正式证据分析的旧版兼容任务 fail closed。平台真实性策略进 SYSTEM 消息，简历 / 岗位 / 用户要求等不可信数据进 USER 数据区；Prompt v3 使用单遍模板替换。AI 输出只接受字段完整、无重复 / 未知字段、无前后包装或 trailing token 的单一 JSON；`reason` 必须是非空字符串。`RewriteFactValidator` 识别新增技术、实体、数字、责任、成果、范围 / 时间等内容变化，返回 `reviewCode` / `reviewMessage`，不再把事实变化转为 REJECTED；空值、超长、内部身份泄露、控制字符和不支持脚本仍由技术安全门拒绝。NO_EVIDENCE 要求进入上下文并明确标记为当前材料未体现 / 候选方向，不改变 Evidence。Diff 由前端代码确定性生成。建议只存在于当前会话：Suggest / Reject / Regenerate 不修改草稿与服务端；Apply 必须显式点击并重新验证候选有效，只替换对应 Bullet，形成单个 Undo 节点后进入既有 dirty → Auto Save → CAS。用户 Profile / Rules 高级分层仍未实现。
 
-Gate 结论：首次独立 Review 发现事实闭包可被否定翻转、程度 / 责任升级、数字关系重绑、未知实体 / 技术、成果 / 因果、时间 / 范围和 Unicode 绕过，并发现 Parser 会接受缺失 reason、重复 / 未知字段及 trailing JSON，因此撤回旧 Gate 结论。修复后校验器改为只放行可由当前 Bullet 原文证明的保守安全子集，关系分隔、无显式分隔的多事实歧义、事实谓词、未知脚本与 Unicode 控制字符均 fail closed；Parser 严格执行单 JSON 与完整 Schema。回归测试与最终独立复审确认已知 Blocker 关闭，Phase 5 Gate 重新通过。Phase 5 的“可追溯”仅指当前会话内可查看原文、候选、Diff、原因并可 Undo，不包含持久化 AI History 或 Change Event。
+Gate 结论：Prompt v3、严格 JSON Schema、技术安全 fail-closed、事实 review advisory、NO_EVIDENCE 上下文、READY + advisory 的 Apply / Undo 与低价值质量 Gate 均有回归覆盖。Phase 5 的“可追溯”仅指当前会话内可查看原文、候选、Diff、原因并可 Undo，不包含持久化 AI History 或 Change Event。
 
 ### Phase 6 — Typst Preview 与导出（已完成，Final Gate 已通过）
 

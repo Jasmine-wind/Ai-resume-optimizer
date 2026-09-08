@@ -61,6 +61,8 @@ export interface BulletSuggestionResult {
   originalText: string
   suggestedText: string | null
   reason: string | null
+  reviewCode: string | null
+  reviewMessage: string | null
   rejectCode: string | null
   rejectMessage: string | null
   modelName: string | null

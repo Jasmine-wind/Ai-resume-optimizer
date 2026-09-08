@@ -185,29 +185,31 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
             log.info("Bullet rewrite refused by AI: optimizationTaskId={}", optimizationTaskId);
             return rejected(request, currentRevision, persistedOriginal,
                     WorkspaceBulletSuggestionVO.REJECT_CODE_REFUSED,
-                    "AI 无法在不新增事实的情况下改写这条要点，请继续手工编辑");
+                    "AI 没有返回可用的改写候选，请重新生成或继续手工编辑。", modelName);
         } catch (BusinessException exception) {
             throw new AiGatewayException(AiFailureCode.SCHEMA_INVALID, "AI 返回结果格式异常");
         }
 
-        // 事实校验只以当前 Bullet 原文为闭包基线：不跨 Bullet 搬运事实。
+        // 事实审查只以当前 Bullet 原文为基线：不跨 Bullet 搬运事实。
+        // 内容变化是给用户的 review advisory；只有技术安全问题仍然 hard reject。
         RewriteFactValidationResult factCheck =
                 rewriteFactValidator.validate(persistedOriginal, output.suggestedText());
-        if (!factCheck.passed()) {
-            log.info("Bullet rewrite rejected by fact validator: optimizationTaskId={}, code={}",
+        if (!factCheck.passed() && factCheck.code().isTechnicalSafetyFailure()) {
+            log.info("Bullet rewrite rejected by technical safety gate: optimizationTaskId={}, code={}",
                     optimizationTaskId, factCheck.code());
             return rejected(request, currentRevision, persistedOriginal,
-                    factCheck.code().name(),
-                    factCheck.message() + "，建议已拒绝，请继续手工编辑");
+                    factCheck.code().name(), factCheck.message(), modelName);
         }
 
         if (rewriteMaterialityGate.isLowValueChange(persistedOriginal, output.suggestedText())) {
             log.info("Bullet rewrite rejected as low-value change: optimizationTaskId={}", optimizationTaskId);
             return rejected(request, currentRevision, persistedOriginal,
                     WorkspaceBulletSuggestionVO.REJECT_CODE_LOW_VALUE_CHANGE,
-                    "这次改写只产生了很轻微的表达变化，没有足够价值，建议保留原文。");
+                    "这次改写只产生了很轻微的表达变化，没有足够价值，建议保留原文。", modelName);
         }
 
+        String reviewCode = factCheck.passed() ? null : factCheck.code().name();
+        String reviewMessage = factCheck.passed() ? null : reviewMessage(factCheck.code());
         return WorkspaceBulletSuggestionVO.builder()
                 .requestId(request.getRequestId())
                 .state(WorkspaceBulletSuggestionVO.STATE_READY)
@@ -216,6 +218,8 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
                 .originalText(persistedOriginal)
                 .suggestedText(output.suggestedText())
                 .reason(output.reason())
+                .reviewCode(reviewCode)
+                .reviewMessage(reviewMessage)
                 .modelName(modelName)
                 .build();
     }
@@ -225,7 +229,8 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
             long baseRevision,
             String persistedOriginal,
             String rejectCode,
-            String rejectMessage) {
+            String rejectMessage,
+            String modelName) {
         return WorkspaceBulletSuggestionVO.builder()
                 .requestId(request.getRequestId())
                 .state(WorkspaceBulletSuggestionVO.STATE_REJECTED)
@@ -234,8 +239,20 @@ public class BulletRewriteServiceImpl implements BulletRewriteService {
                 .originalText(persistedOriginal)
                 .rejectCode(rejectCode)
                 .rejectMessage(rejectMessage)
-                .modelName("unknown")
+                .modelName(modelName)
                 .build();
+    }
+
+    private String reviewMessage(com.winter.airesumeoptimizer.module.workspace.enums.RewriteFactViolationCode code) {
+        return switch (code) {
+            case NEW_TECHNOLOGY, NEW_ENTITY -> "建议包含原文未写明的信息，请确认这些内容确实属于你的真实经历。";
+            case NEW_QUANTITATIVE_CLAIM -> "建议包含新的数字或量化描述，请确认数值真实准确。";
+            case RESPONSIBILITY_ESCALATION -> "建议提高了职责或参与程度的表述，请确认符合实际情况。";
+            case NEW_ACHIEVEMENT -> "建议加入了新的成果或效果描述，请确认内容真实。";
+            case NEW_SCOPE_OR_TIME -> "建议加入或改变了时间、范围等信息，请确认准确。";
+            case UNDETERMINED -> "这次改写变化较大，系统无法自动确认所有信息，请核对后再采纳。";
+            default -> null;
+        };
     }
 
     /** 只按用户明确选中的 ID 精确查找，不做任何模糊 / 内容匹配。 */

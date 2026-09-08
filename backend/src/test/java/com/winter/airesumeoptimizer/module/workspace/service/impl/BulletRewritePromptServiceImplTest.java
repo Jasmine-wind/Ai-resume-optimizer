@@ -14,7 +14,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Prompt 组装约束：SYSTEM 只承载可信策略；NO_EVIDENCE 不得进入 Rewrite 上下文。
+ * Prompt 组装约束：SYSTEM 只承载可信策略；NO_EVIDENCE 进入 Rewrite 上下文但明确不是用户事实。
  */
 class BulletRewritePromptServiceImplTest {
 
@@ -22,15 +22,18 @@ class BulletRewritePromptServiceImplTest {
             new BulletRewritePromptServiceImpl(new PromptTemplateService());
 
     @Test
-    void v2PromptShouldRequireMaterialRewriteAndGroundReasonsInActualChanges() {
+    void v3PromptShouldAllowCandidatesAndGroundReasonsInActualChanges() {
         BulletRewritePromptDTO prompt = service.buildPrompt(
                 BulletSuggestIntent.JOB_TARGETED, null, "负责订单服务开发", evidenceAnalysis());
 
-        assertThat(prompt.getPromptVersion()).isEqualTo("bullet_rewrite_v2");
+        assertThat(prompt.getPromptVersion()).isEqualTo("bullet_rewrite_v3");
+        assertThat(prompt.getSystemPolicy()).contains("候选");
+        assertThat(prompt.getSystemPolicy()).contains("用户必须看到原文、建议版本、Diff");
         assertThat(prompt.getSystemPolicy()).contains("不要为了生成结果而生成结果");
         assertThat(prompt.getSystemPolicy()).contains("只增加“并 / 且 / 并且 / 以及”等连接词");
         assertThat(prompt.getSystemPolicy()).contains("reason 必须对应");
         assertThat(prompt.getSystemPolicy()).contains("当前表述已经清楚，没有足够有价值的改写");
+        assertThat(prompt.getSystemPolicy()).contains("请确认真实性");
     }
 
     @Test
@@ -38,9 +41,10 @@ class BulletRewritePromptServiceImplTest {
         BulletRewritePromptDTO prompt = service.buildPrompt(
                 BulletSuggestIntent.JOB_TARGETED, null, "负责订单服务开发", evidenceAnalysis());
 
-        assertThat(prompt.getSystemPolicy()).contains("事实闭包 = 被改写要点的原文");
-        assertThat(prompt.getUserContent()).contains("被改写要点原文（事实闭包");
-        assertThat(prompt.getUserContent()).doesNotContain("Kafka 消息队列经验");
+        assertThat(prompt.getSystemPolicy()).contains("可以根据用户要求、岗位要求和 Evidence 分析提出原文没有明确写出的候选");
+        assertThat(prompt.getUserContent()).contains("被改写要点原文");
+        assertThat(prompt.getUserContent()).contains("当前材料未体现");
+        assertThat(prompt.getUserContent()).contains("Kafka 消息队列经验");
     }
 
     @Test
@@ -67,16 +71,18 @@ class BulletRewritePromptServiceImplTest {
     }
 
     @Test
-    void noEvidenceRequirementMustNotEnterRewriteContext() {
+    void noEvidenceRequirementEntersContextAsUnconfirmedCandidateDirection() {
         BulletRewritePromptDTO prompt = service.buildPrompt(
                 BulletSuggestIntent.JOB_TARGETED, null, "负责订单服务开发", evidenceAnalysis());
 
         assertThat(prompt.getUserContent()).contains("熟悉 Redis");
-        assertThat(prompt.getUserContent()).doesNotContain("具备 Kafka 消息队列经验");
+        assertThat(prompt.getUserContent()).contains("具备 Kafka 消息队列经验");
+        assertThat(prompt.getUserContent()).contains("这是岗位要求，可作为候选补充方向，不是已确认的用户事实");
+        assertThat(prompt.getUserContent()).contains("当前材料未体现");
     }
 
     @Test
-    void matchedAndPartialRequirementsShouldBeIncluded() {
+    void matchedPartialAndNoEvidenceRequirementsShouldBeIncludedWithDistinctLabels() {
         BulletRewritePromptDTO prompt = service.buildPrompt(
                 BulletSuggestIntent.JOB_TARGETED, null, "负责订单服务开发", evidenceAnalysis());
 

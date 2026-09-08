@@ -147,6 +147,8 @@ const activeBulletText = computed(() => {
             :original-text="props.suggest.candidate.value?.originalText ?? activeBulletText"
             :suggested-text="props.suggest.candidate.value?.suggestedText ?? null"
             :reason="props.suggest.candidate.value?.reason ?? null"
+            :review-code="props.suggest.candidate.value?.reviewCode ?? null"
+            :review-message="props.suggest.candidate.value?.reviewMessage ?? null"
             :reject-code="props.suggest.rejectInfo.value?.code ?? null"
             :reject-message="props.suggest.rejectInfo.value?.message ?? null"
             :error-message="props.suggest.errorMessage.value ?? null"

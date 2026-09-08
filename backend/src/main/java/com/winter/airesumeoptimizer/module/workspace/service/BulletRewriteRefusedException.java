@@ -1,7 +1,7 @@
 package com.winter.airesumeoptimizer.module.workspace.service;
 
 /**
- * AI 明确表示无法在不新增事实的情况下改写。属于保守防线的正常结果，不是系统错误。
+ * AI 明确拒绝或没有返回可用候选。属于生成结果的正常失败，不是内容事实审查结果。
  */
 public class BulletRewriteRefusedException extends RuntimeException {
 

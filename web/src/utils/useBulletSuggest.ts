@@ -26,6 +26,8 @@ export interface BulletSuggestionCandidate {
   originalText: string
   suggestedText: string
   reason: string
+  reviewCode: string | null
+  reviewMessage: string | null
   modelName: string | null
 }
 
@@ -213,6 +215,8 @@ export function useBulletSuggest(
           originalText: binding.originalText,
           suggestedText: result.suggestedText,
           reason: result.reason ?? '',
+          reviewCode: result.reviewCode,
+          reviewMessage: result.reviewMessage,
           modelName: result.modelName,
         }
         phase.value = 'ready'

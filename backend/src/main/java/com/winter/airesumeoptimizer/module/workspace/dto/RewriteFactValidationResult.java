@@ -3,7 +3,7 @@ package com.winter.airesumeoptimizer.module.workspace.dto;
 import com.winter.airesumeoptimizer.module.workspace.enums.RewriteFactViolationCode;
 
 /**
- * Rewrite 事实校验结果。passed 为 false 时候选不得展示为可采纳建议。
+ * Rewrite 内容审查结果。事实变化可作为 advisory；技术安全失败仍不可进入 READY。
  */
 public record RewriteFactValidationResult(
         boolean passed,

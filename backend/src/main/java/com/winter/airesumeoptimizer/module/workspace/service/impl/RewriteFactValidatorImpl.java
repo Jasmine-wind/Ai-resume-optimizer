@@ -17,10 +17,10 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 /**
- * 单 Bullet 的保守事实闭包校验器。
+ * 单 Bullet 的确定性内容审查器与技术安全检查器。
  *
- * <p>实现只放行可以由原文确定性证明安全的有限表达改写。未知 token、未知中文事实片段、
- * 极性/程度/责任变化以及数字语义变化全部 fail closed；不调用第二次 LLM，也不使用相似度判断。
+ * <p>它仍然识别未知 token、中文事实片段、极性/程度/责任变化以及数字语义变化，
+ * 供服务层生成 review advisory；空值、超长、身份泄露、控制字符和不支持的脚本仍然技术性 fail closed。
  */
 @Service
 public class RewriteFactValidatorImpl implements RewriteFactValidator {
@@ -133,13 +133,13 @@ public class RewriteFactValidatorImpl implements RewriteFactValidator {
             return fail(RewriteFactViolationCode.OVERSIZED, "AI 改写文本超过要点长度上限");
         }
         if (containsFormatControl(suggestedText)) {
-            return fail(RewriteFactViolationCode.UNDETERMINED, "AI 改写包含不可见格式控制字符");
+            return fail(RewriteFactViolationCode.CONTROL_CHARACTER, "AI 改写包含不可见格式控制字符");
         }
 
         String original = normalize(originalText == null ? "" : originalText);
         String suggestionWithCase = Normalizer.normalize(suggestedText, Normalizer.Form.NFKC);
         if (containsUnsupportedScript(suggestionWithCase)) {
-            return fail(RewriteFactViolationCode.UNDETERMINED, "AI 改写包含无法由事实校验器安全识别的字符脚本");
+            return fail(RewriteFactViolationCode.UNSUPPORTED_SCRIPT, "AI 改写包含无法安全处理的字符脚本");
         }
         String suggestion = suggestionWithCase.toLowerCase(Locale.ROOT);
         String originalCorpus = stripWhitespace(original);

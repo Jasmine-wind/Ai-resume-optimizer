@@ -7,6 +7,8 @@ const props = defineProps<{
   originalText: string
   suggestedText?: string | null
   reason?: string | null
+  reviewCode?: string | null
+  reviewMessage?: string | null
   rejectCode?: string | null
   rejectMessage?: string | null
   errorMessage?: string | null
@@ -26,22 +28,6 @@ const diffSegments = computed(() =>
 )
 
 const isLowValueChange = computed(() => props.rejectCode === 'LOW_VALUE_CHANGE')
-
-const rejectReasonLabel = computed(() => {
-  switch (props.rejectCode) {
-    case 'NEW_TECHNOLOGY':
-    case 'NEW_ENTITY':
-      return '引入原文没有的信息'
-    case 'NEW_QUANTITATIVE_CLAIM':
-      return '改变事实语义'
-    case 'NEW_SCOPE_OR_TIME':
-      return '删除或改变了关键限定条件'
-    case 'AI_REFUSED':
-      return '无法在原有事实范围内改写'
-    default:
-      return '与原始材料不一致'
-  }
-})
 
 const submitCustom = () => {
   const instruction = customInstruction.value.trim()
@@ -104,6 +90,10 @@ const submitCustom = () => {
         <span class="suggestion-label">为什么这样改</span>
         <p>{{ props.reason || '保留原有事实，只调整表达。' }}</p>
       </div>
+      <p v-if="props.mode === 'ready' && props.reviewCode" class="suggestion-review-note">
+        <strong>请确认内容真实</strong>
+        {{ props.reviewMessage || '建议中包含原文未写明或变化较大的信息，请确认符合你的真实经历后再采纳。' }}
+      </p>
       <p v-if="props.mode === 'stale'" class="suggestion-stale">
         内容或版本已变化，这条建议已失效，不能采纳。可以重新生成或关闭。
       </p>
@@ -115,7 +105,7 @@ const submitCustom = () => {
           :disabled="!props.suggestedText"
           @click="emit('apply')"
         >
-          采纳
+          {{ props.reviewCode ? '确认并采纳' : '采纳' }}
         </el-button>
         <el-button size="small" @click="emit('regenerate')">重新生成</el-button>
         <el-button size="small" text @click="emit('reject')">{{
@@ -135,12 +125,11 @@ const submitCustom = () => {
     </template>
 
     <template v-else-if="props.mode === 'rejected'">
-      <p class="suggestion-title">这条建议没有通过事实校验</p>
+      <p class="suggestion-title">这条建议暂时不可用</p>
       <p class="suggestion-note">
-        AI 改写改变了原始材料的语义，例如把未确认的信息写成了确定事实，因此这条建议没有被采纳。
+        系统无法安全处理这次 AI 输出。你可以重新生成，也可以继续手工编辑。
       </p>
-      <span class="suggestion-reason-label">原因：{{ rejectReasonLabel }}</span>
-      <p v-if="props.rejectMessage" class="suggestion-detail">校验说明：{{ props.rejectMessage }}</p>
+      <p v-if="props.rejectMessage" class="suggestion-detail">处理说明：{{ props.rejectMessage }}</p>
       <div class="suggestion-actions">
         <el-button size="small" type="primary" @click="emit('regenerate')">重新生成建议</el-button>
         <el-button size="small" text @click="emit('reject')">继续手工编辑</el-button>
@@ -194,6 +183,21 @@ const submitCustom = () => {
 .suggestion-detail {
   color: var(--app-text-secondary);
   font-size: 12px;
+}
+
+.suggestion-review-note {
+  margin: 0;
+  padding: 7px 9px;
+  border-left: 2px solid var(--app-warning);
+  color: var(--app-warning);
+  background: var(--app-warning-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.suggestion-review-note strong {
+  margin-right: 4px;
+  font-weight: 700;
 }
 
 .suggestion-reason-label {

@@ -1,9 +1,8 @@
 package com.winter.airesumeoptimizer.module.workspace.enums;
 
 /**
- * Rewrite 事实校验违规类型。
- * 校验的是“事实闭包”而不是“词面闭包”：同义改写、语法调整和不改变事实的语言重组允许通过；
- * 新增或升级实体、技术、数字/量化结果、责任级别、成果、因果、范围、时间等事实声明必须拒绝。
+ * Rewrite 内容审查与技术安全结果类型。
+ * 内容变化是用户确认提示，不是建议状态的硬拦截；技术安全结果仍然 fail closed。
  */
 public enum RewriteFactViolationCode {
 
@@ -37,6 +36,19 @@ public enum RewriteFactViolationCode {
     /** 出现疑似元素 ID / UUID，AI 不得生成结构化身份。 */
     ELEMENT_IDENTITY_LEAK,
 
-    /** 无法可靠判断，按保守原则拒绝。 */
-    UNDETERMINED
+    /** 无法自动判断内容变化，提示用户核对真实性。 */
+    UNDETERMINED,
+
+    /** 输出包含不可见格式控制字符，技术上不安全。 */
+    CONTROL_CHARACTER,
+
+    /** 输出包含未支持的字符脚本，无法安全处理。 */
+    UNSUPPORTED_SCRIPT;
+
+    public boolean isTechnicalSafetyFailure() {
+        return switch (this) {
+            case EMPTY_OR_BLANK, OVERSIZED, ELEMENT_IDENTITY_LEAK, CONTROL_CHARACTER, UNSUPPORTED_SCRIPT -> true;
+            default -> false;
+        };
+    }
 }

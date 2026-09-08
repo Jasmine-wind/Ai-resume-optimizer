@@ -163,6 +163,7 @@ async function mockWorkspace(
     denseRequirements?: boolean
     longResume?: boolean
     lowValueSuggestion?: boolean
+    reviewSuggestion?: boolean
   } = {},
 ) {
   await page.addInitScript(() => localStorage.setItem('ai-resume-token', 'workspace-frame-token'))
@@ -241,8 +242,18 @@ async function mockWorkspace(
         originalText: body.originalText,
         suggestedText: options.lowValueSuggestion
           ? null
-          : `${body.originalText}，持续改善交付稳定性`,
-        reason: options.lowValueSuggestion ? null : '保留真实事实，只让职责与结果更清楚。',
+          : options.reviewSuggestion
+            ? '负责订单服务开发，并使用 Kafka 处理异步消息'
+            : `${body.originalText}，持续改善交付稳定性`,
+        reason: options.lowValueSuggestion
+          ? null
+          : options.reviewSuggestion
+            ? '补充 Kafka 相关技术描述；原文未包含该信息，请确认真实性。'
+            : '保留真实事实，只让职责与结果更清楚。',
+        reviewCode: options.reviewSuggestion ? 'NEW_TECHNOLOGY' : null,
+        reviewMessage: options.reviewSuggestion
+          ? '建议包含原文未写明的信息，请确认这些内容确实属于你的真实经历。'
+          : null,
         rejectCode: options.lowValueSuggestion ? 'LOW_VALUE_CHANGE' : null,
         rejectMessage: options.lowValueSuggestion
           ? '这次改写只产生了很轻微的表达变化，没有足够价值，建议保留原文。'
@@ -410,6 +421,28 @@ test.describe('Workspace editor frame', () => {
 
     await page.getByRole('button', { name: '拒绝' }).click()
     await expect(page.getByText('建议版本', { exact: true })).toBeHidden()
+  })
+
+  test('keeps a fact review advisory applyable and undoable', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await mockWorkspace(page, { reviewSuggestion: true })
+    await page.goto('/workspace/42?requirement=3')
+    const bullet = page.locator('[data-bullet-id="bullet-0"]')
+    await bullet.hover()
+    await bullet.getByRole('button', { name: 'AI 优化', exact: true }).click()
+    await page.getByRole('menuitem', { name: '精简' }).click()
+
+    await expect(page.getByText('建议版本', { exact: true })).toBeVisible()
+    await expect(page.getByText('负责订单服务开发，并使用 Kafka 处理异步消息', { exact: true })).toBeVisible()
+    await expect(page.getByText('请确认内容真实', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '确认并采纳', exact: true })).toBeVisible()
+    await expect(page.getByText('没有通过事实校验', { exact: true })).toHaveCount(0)
+
+    await page.getByRole('button', { name: '确认并采纳', exact: true }).click()
+    await expect(bullet.locator('textarea')).toHaveValue('负责订单服务开发，并使用 Kafka 处理异步消息')
+    await expect(page.getByText('✓ 已保存', { exact: true })).toBeVisible({ timeout: 5_000 })
+    await page.getByRole('button', { name: '撤销', exact: true }).click()
+    await expect(bullet.locator('textarea')).toHaveValue('负责 Java 后端服务与 Redis 缓存优化工作 1')
   })
 
   test('shows a neutral no-op state for a low-value AI rewrite', async ({ page }) => {

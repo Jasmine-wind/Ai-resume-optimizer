@@ -94,6 +94,11 @@ const analysisRunning = computed(() => {
   const status = analysisTask.value?.status
   return Boolean(activeAnalysis.value && (!status || status === 'PENDING' || status === 'RUNNING'))
 })
+const requiresFreshAnalysis = computed(() =>
+  analysisTask.value?.errorCode === 'CREDENTIAL_CHANGED'
+  || (analysisTask.value?.errorCode === 'CONFIGURATION_INVALID'
+    && analysisTask.value?.errorMessage === 'AI Credential 加密配置不可用'),
+)
 const startBlockReason = computed(() =>
   getStartBlockReason({
     resume: selectedResume.value,
@@ -134,6 +139,7 @@ const composerActionDetail = computed(() => {
   if (startBlockReason.value === '请粘贴目标岗位 JD') return ''
   if (analysisRunning.value) return currentStage.value
   if (activeAnalysis.value && analysisError.value) {
+    if (requiresFreshAnalysis.value) return 'AI 配置已经更换，将使用当前配置重新创建任务；简历和岗位信息会保留。'
     return analysisTimedOut.value
       ? '可以继续等待，或稍后回到首页查看。'
       : '当前任务已保留，可以直接重试。'
@@ -417,6 +423,13 @@ const retryAnalysis = async () => {
   } finally {
     startingAnalysis.value = false
   }
+}
+
+const restartWithCurrentConfiguration = async () => {
+  if (!activeAnalysis.value || startingAnalysis.value) return
+  analysisPolling?.stop()
+  clearActiveAnalysis()
+  await handleStartAnalysis()
 }
 
 const continueWaiting = () => {
@@ -791,7 +804,9 @@ onUnmounted(() => {
         <div>
           <strong>{{ analysisError ? analysisStateTitle : '岗位分析正在后台进行' }}</strong>
           <p>{{ analysisError || currentStage }}</p>
-          <p v-if="analysisError && !analysisTimedOut">简历和岗位信息已保存，无需重新填写。</p>
+          <p v-if="analysisError && !analysisTimedOut">
+            {{ requiresFreshAnalysis ? 'AI 配置已经更换，需要使用当前配置重新创建任务；简历和岗位信息已保留。' : '简历和岗位信息已保存，无需重新填写。' }}
+          </p>
           <div v-if="analysisError" class="home-state-actions">
             <el-button
               v-if="analysisTimedOut"
@@ -806,9 +821,9 @@ onUnmounted(() => {
               type="primary"
               plain
               :loading="startingAnalysis"
-              @click="retryAnalysis"
+              @click="requiresFreshAnalysis ? restartWithCurrentConfiguration() : retryAnalysis()"
             >
-              重试分析
+              {{ requiresFreshAnalysis ? '使用当前配置重新开始' : '重试分析' }}
             </el-button>
           </div>
         </div>

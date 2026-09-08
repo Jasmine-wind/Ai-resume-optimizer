@@ -120,6 +120,18 @@ describe('AiProviderSettingsView', () => {
     expect(active.text()).toContain('新创建的 AI 任务会使用这份配置。')
   })
 
+  it('presents BYOK as required connection setup rather than an optional advanced feature', async () => {
+    const wrapper = await mountLoaded(credential('DISABLED', false))
+
+    expect(wrapper.text()).toContain('AI 配置')
+    expect(wrapper.text()).toContain('连接设置')
+    expect(wrapper.text()).toContain('开始岗位分析前，请先配置并启用你自己的 API 密钥。')
+    expect(wrapper.text()).toContain('配置并启用兼容 OpenAI 接口的 API 后，即可使用岗位分析和 AI 优化；密钥不会在页面回显。')
+    expect(wrapper.text()).not.toContain('可选配置')
+    expect(wrapper.text()).not.toContain('高级设置')
+    expect(wrapper.text()).not.toContain('高级能力')
+  })
+
   it('disables BYOK without promising another provider', async () => {
     disableMock.mockResolvedValue(credential('DISABLED', true))
     const wrapper = await mountLoaded(credential('ACTIVE', true))

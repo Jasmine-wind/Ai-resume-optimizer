@@ -665,6 +665,7 @@ onUnmounted(() => {
             class="home-upload-trigger"
             :disabled="analysisRunning || startingAnalysis"
             :aria-expanded="uploadRowVisible"
+            :aria-label="!resumes.length ? '上传第一份简历' : undefined"
             aria-controls="home-inline-upload"
             @click="uploadRowVisible = !uploadRowVisible"
           >

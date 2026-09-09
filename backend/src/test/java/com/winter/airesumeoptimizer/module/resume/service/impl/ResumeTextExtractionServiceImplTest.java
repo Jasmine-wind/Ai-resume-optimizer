@@ -14,6 +14,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.junit.jupiter.api.Test;
@@ -72,6 +77,43 @@ class ResumeTextExtractionServiceImplTest {
     }
 
     @Test
+    void extractTextShouldPreserveInterleavedDocxBodyOrder() throws IOException {
+        byte[] docxBytes = buildInterleavedDocx();
+        when(fileStorageService.loadAsStream("resumes/1/interleaved.docx"))
+                .thenReturn(new ByteArrayInputStream(docxBytes));
+
+        String text = service.extractText("resumes/1/interleaved.docx", "docx");
+
+        assertThat(text).containsSubsequence("段落 A", "表格 B", "段落 C", "表格 D");
+    }
+
+    @Test
+    void collectDocxTextBlocksShouldKeepMultipleParagraphsInsideTableCell() throws IOException {
+        try (XWPFDocument document = new XWPFDocument()) {
+            var table = document.createTable(1, 1);
+            var cell = table.getRow(0).getCell(0);
+            cell.setText("单元格第一段");
+            cell.addParagraph().createRun().setText("单元格第二段");
+
+            var blocks = service.collectDocxTextBlocks(document);
+
+            assertThat(blocks).extracting("text")
+                    .containsSubsequence("单元格第一段", "单元格第二段");
+        }
+    }
+
+    @Test
+    void extractTextShouldSelectPositionSortedPdfWhenItHasClearlyHealthierOrder() throws IOException {
+        byte[] pdfBytes = buildPositionSortedPdf();
+        when(fileStorageService.loadAsStream("resumes/1/position-sorted.pdf"))
+                .thenReturn(new ByteArrayInputStream(pdfBytes));
+
+        String text = service.extractText("resumes/1/position-sorted.pdf", "pdf");
+
+        assertThat(text).containsSubsequence("Summary", "Projects", "Education", "Skills");
+    }
+
+    @Test
     void collectDocxTextBlocksShouldRecordSourceTypes() throws IOException {
         try (XWPFDocument document = new XWPFDocument()) {
             document.createParagraph().createRun().setText("普通段落");
@@ -84,6 +126,49 @@ class ResumeTextExtractionServiceImplTest {
                     .contains("paragraph", "table");
             assertThat(blocks).extracting("text")
                     .contains("普通段落", "表格内容");
+        }
+    }
+
+    private byte[] buildInterleavedDocx() throws IOException {
+        try (XWPFDocument document = new XWPFDocument();
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            document.createParagraph().createRun().setText("段落 A");
+            XWPFTable firstTable = document.createTable(1, 1);
+            firstTable.getRow(0).getCell(0).setText("表格 B");
+            document.createParagraph().createRun().setText("段落 C");
+            XWPFTable secondTable = document.createTable(1, 1);
+            secondTable.getRow(0).getCell(0).setText("表格 D");
+            document.write(outputStream);
+            return outputStream.toByteArray();
+        }
+    }
+
+    private byte[] buildPositionSortedPdf() throws IOException {
+        try (PDDocument document = new PDDocument();
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            PDPage page = new PDPage();
+            document.addPage(page);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                content.beginText();
+                content.newLineAtOffset(72, 600);
+                content.showText("Projects");
+                content.endText();
+                content.beginText();
+                content.newLineAtOffset(72, 720);
+                content.showText("Summary");
+                content.endText();
+                content.beginText();
+                content.newLineAtOffset(72, 560);
+                content.showText("Education");
+                content.endText();
+                content.beginText();
+                content.newLineAtOffset(72, 520);
+                content.showText("Skills");
+                content.endText();
+            }
+            document.save(outputStream);
+            return outputStream.toByteArray();
         }
     }
 

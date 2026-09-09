@@ -17,6 +17,7 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.poi.hwpf.HWPFDocument;
 import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
+import org.apache.poi.xwpf.usermodel.IBodyElement;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFHeader;
 import org.apache.poi.xwpf.usermodel.XWPFHeaderFooter;
@@ -27,15 +28,21 @@ import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.apache.xmlbeans.XmlCursor;
 import org.apache.xmlbeans.XmlObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ResumeTextExtractionServiceImpl implements ResumeTextExtractionService {
 
+    private static final Logger log = LoggerFactory.getLogger(ResumeTextExtractionServiceImpl.class);
+
     private final FileStorageService fileStorageService;
+    private final ResumePdfTextCandidateSelector pdfCandidateSelector;
 
     public ResumeTextExtractionServiceImpl(FileStorageService fileStorageService) {
         this.fileStorageService = fileStorageService;
+        this.pdfCandidateSelector = new ResumePdfTextCandidateSelector();
     }
 
     @Override
@@ -59,8 +66,50 @@ public class ResumeTextExtractionServiceImpl implements ResumeTextExtractionServ
     private String extractPdfText(InputStream inputStream) throws IOException {
         byte[] bytes = inputStream.readAllBytes();
         try (PDDocument document = Loader.loadPDF(bytes)) {
-            return normalizeExtractedText(new PDFTextStripper().getText(document));
+            String legacyText = null;
+            String positionSortedText = null;
+            IOException legacyFailure = null;
+            IOException positionFailure = null;
+            try {
+                PDFTextStripper stripper = new PDFTextStripper();
+                stripper.setSortByPosition(false);
+                legacyText = normalizeExtractedText(stripper.getText(document));
+            } catch (IOException exception) {
+                legacyFailure = exception;
+            }
+            try {
+                PDFTextStripper stripper = new PDFTextStripper();
+                stripper.setSortByPosition(true);
+                positionSortedText = normalizeExtractedText(stripper.getText(document));
+            } catch (IOException exception) {
+                positionFailure = exception;
+            }
+            if (legacyText == null && positionSortedText == null) {
+                throw legacyFailure != null ? legacyFailure : positionFailure;
+            }
+
+            ResumePdfTextCandidateSelector.Selection selection = pdfCandidateSelector.select(
+                    legacyText, positionSortedText);
+            log.info(
+                    "PDF extraction candidate selected: legacyScore={}, positionScore={}, selected={}, "
+                            + "legacyLineCount={}, positionLineCount={}, legacyLength={}, positionLength={}",
+                    selection.legacyScore(),
+                    selection.positionScore(),
+                    selection.candidateType(),
+                    lineCount(legacyText),
+                    lineCount(positionSortedText),
+                    textLength(legacyText),
+                    textLength(positionSortedText));
+            return selection.text();
         }
+    }
+
+    private int lineCount(String text) {
+        return text == null || text.isBlank() ? 0 : (int) text.lines().count();
+    }
+
+    private int textLength(String text) {
+        return text == null ? 0 : text.length();
     }
 
     private String extractDocText(InputStream inputStream) throws IOException {
@@ -83,11 +132,8 @@ public class ResumeTextExtractionServiceImpl implements ResumeTextExtractionServ
 
     List<ExtractedTextBlock> collectDocxTextBlocks(XWPFDocument document) {
         List<ExtractedTextBlock> blocks = new ArrayList<>();
-        for (XWPFParagraph paragraph : document.getParagraphs()) {
-            addTextBlock(blocks, "paragraph", paragraph.getText());
-        }
-        for (XWPFTable table : document.getTables()) {
-            collectTableTextBlocks(table, blocks);
+        for (IBodyElement bodyElement : document.getBodyElements()) {
+            collectBodyElementTextBlocks(bodyElement, blocks);
         }
         for (XWPFHeader header : document.getHeaderList()) {
             collectHeaderFooterTextBlocks(header, "header", blocks);
@@ -99,11 +145,23 @@ public class ResumeTextExtractionServiceImpl implements ResumeTextExtractionServ
         return blocks;
     }
 
+    private void collectBodyElementTextBlocks(IBodyElement bodyElement, List<ExtractedTextBlock> blocks) {
+        if (bodyElement instanceof XWPFParagraph paragraph) {
+            addTextBlock(blocks, "paragraph", paragraph.getText());
+        } else if (bodyElement instanceof XWPFTable table) {
+            collectTableTextBlocks(table, blocks);
+        }
+    }
+
     private void collectTableTextBlocks(XWPFTable table, List<ExtractedTextBlock> blocks) {
         for (XWPFTableRow row : table.getRows()) {
             for (XWPFTableCell cell : row.getTableCells()) {
-                for (XWPFParagraph paragraph : cell.getParagraphs()) {
-                    addTextBlock(blocks, "table", paragraph.getText());
+                for (IBodyElement bodyElement : cell.getBodyElements()) {
+                    if (bodyElement instanceof XWPFParagraph paragraph) {
+                        addTextBlock(blocks, "table", paragraph.getText());
+                    } else if (bodyElement instanceof XWPFTable nestedTable) {
+                        collectTableTextBlocks(nestedTable, blocks);
+                    }
                 }
             }
         }

@@ -49,21 +49,24 @@ public class ResumeBlockBuilderImpl implements ResumeBlockBuilder {
                 }
                 String sectionType = section.getSectionType();
                 SourceSectionConfidence sourceConfidence = sourceSectionConfidence(section);
-                blocks.add(ResumeBlockDTO.builder()
-                        .index(index++)
-                        .originalIndex(index - 1)
-                        .displayOrder(index - 1)
-                        .text(truncate(text))
-                        .sourceType("cleanedText")
-                        .iconType(resolveIconType(section, text))
-                        .sourceSection(sectionType)
-                        .ruleSection(normalizeRuleSection(sectionType))
-                        .ruleConfidence(ruleConfidence(sourceConfidence, sectionType))
-                        .sourceSectionConfidence(sourceConfidence.name())
-                        .lockedLevel(sourceConfidence.name())
-                        .finalSectionSource("RULE_SOURCE_SECTION")
-                        .sectionLocked(sourceConfidence == SourceSectionConfidence.HIGH)
-                        .build());
+                String iconType = resolveIconType(section, text);
+                for (String fragment : splitBlockText(text)) {
+                    blocks.add(ResumeBlockDTO.builder()
+                            .index(index++)
+                            .originalIndex(index - 1)
+                            .displayOrder(index - 1)
+                            .text(fragment)
+                            .sourceType("cleanedText")
+                            .iconType(iconType)
+                            .sourceSection(sectionType)
+                            .ruleSection(normalizeRuleSection(sectionType))
+                            .ruleConfidence(ruleConfidence(sourceConfidence, sectionType))
+                            .sourceSectionConfidence(sourceConfidence.name())
+                            .lockedLevel(sourceConfidence.name())
+                            .finalSectionSource("RULE_SOURCE_SECTION")
+                            .sectionLocked(sourceConfidence == SourceSectionConfidence.HIGH)
+                            .build());
+                }
             }
         }
         fillNeighborContext(blocks);
@@ -144,10 +147,41 @@ public class ResumeBlockBuilderImpl implements ResumeBlockBuilder {
                 || text.contains("博士");
     }
 
-    private String truncate(String text) {
-        if (text.length() <= MAX_BLOCK_TEXT_LENGTH) {
-            return text;
+    List<String> splitBlockText(String text) {
+        if (text == null || text.length() <= MAX_BLOCK_TEXT_LENGTH) {
+            return text == null ? List.of() : List.of(text);
         }
-        return text.substring(0, MAX_BLOCK_TEXT_LENGTH);
+        List<String> fragments = new ArrayList<>();
+        int start = 0;
+        while (text.length() - start > MAX_BLOCK_TEXT_LENGTH) {
+            int end = findSplitPoint(text, start);
+            fragments.add(text.substring(start, end));
+            start = end;
+        }
+        fragments.add(text.substring(start));
+        return fragments;
+    }
+
+    private int findSplitPoint(String text, int start) {
+        int limit = Math.min(text.length(), start + MAX_BLOCK_TEXT_LENGTH);
+        int windowStart = Math.min(limit, start + 300);
+        String[] delimiterGroups = {"。！？!?；;", "，,", " "};
+        for (String delimiters : delimiterGroups) {
+            for (int index = limit - 1; index >= windowStart; index--) {
+                if (delimiters.indexOf(text.charAt(index)) >= 0) {
+                    return safeCodePointBoundary(text, index + 1);
+                }
+            }
+        }
+        return safeCodePointBoundary(text, limit);
+    }
+
+    private int safeCodePointBoundary(String text, int boundary) {
+        if (boundary > 0 && boundary < text.length()
+                && Character.isHighSurrogate(text.charAt(boundary - 1))
+                && Character.isLowSurrogate(text.charAt(boundary))) {
+            return boundary - 1;
+        }
+        return boundary;
     }
 }

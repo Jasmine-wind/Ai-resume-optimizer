@@ -12,6 +12,63 @@ class ResumeBlockBuilderImplTest {
     private final ResumeBlockBuilderImpl service = new ResumeBlockBuilderImpl();
 
     @Test
+    void splitBlockTextShouldKeepBoundaryAt500() {
+        assertThat(service.splitBlockText("a".repeat(500))).containsExactly("a".repeat(500));
+        assertThat(service.splitBlockText("a".repeat(501))).containsExactly("a".repeat(500), "a");
+    }
+
+    @Test
+    void splitBlockTextShouldPreserveLongMixedTextWithoutLoss() {
+        String original = ("中文项目描述，使用 Java Spring Boot 完成服务建设；".repeat(35)) + "结尾";
+
+        var fragments = service.splitBlockText(original);
+
+        assertThat(fragments).isNotEmpty().allSatisfy(fragment -> assertThat(fragment.length()).isLessThanOrEqualTo(500));
+        assertThat(String.join("", fragments)).isEqualTo(original);
+        assertThat(fragments.size()).isLessThanOrEqualTo((int) Math.ceil(original.length() / 500.0) + 1);
+    }
+
+    @Test
+    void splitBlockTextShouldHardSplitUnpunctuatedTextWithoutLoss() {
+        String original = "x".repeat(1201);
+
+        var fragments = service.splitBlockText(original);
+
+        assertThat(fragments).hasSize(3);
+        assertThat(String.join("", fragments)).isEqualTo(original);
+    }
+
+    @Test
+    void splitFragmentsShouldRetainMetadataAndNeighborContext() {
+        String longText = "项目描述。".repeat(280);
+        ResumeTextCleanResultDTO cleanResult = ResumeTextCleanResultDTO.builder()
+                .sections(List.of(ResumeTextSectionDTO.builder()
+                        .sectionType("PROJECTS")
+                        .sourceSectionConfidence("HIGH")
+                        .lines(List.of(longText, "下一条内容"))
+                        .build()))
+                .build();
+
+        var blocks = service.build(cleanResult);
+
+        assertThat(blocks).hasSize(4);
+        assertThat(blocks).allSatisfy(block -> {
+            assertThat(block.getText()).hasSizeLessThanOrEqualTo(500);
+            assertThat(block.getSourceType()).isEqualTo("cleanedText");
+            assertThat(block.getSourceSection()).isEqualTo("PROJECTS");
+            assertThat(block.getRuleSection()).isEqualTo("PROJECTS");
+            assertThat(block.getSourceSectionConfidence()).isEqualTo("HIGH");
+            assertThat(block.getLockedLevel()).isEqualTo("HIGH");
+            assertThat(block.getSectionLocked()).isTrue();
+        });
+        assertThat(blocks.get(0).getPrevText()).isNull();
+        assertThat(blocks.get(blocks.size() - 1).getText()).isEqualTo("下一条内容");
+        assertThat(blocks.get(blocks.size() - 2).getNextText()).isEqualTo("下一条内容");
+        assertThat(blocks).extracting("index").containsExactlyElementsOf(
+                java.util.stream.IntStream.range(0, blocks.size()).boxed().toList());
+    }
+
+    @Test
     void buildShouldCreateIndexedBlocksFromSections() {
         ResumeTextCleanResultDTO cleanResult = ResumeTextCleanResultDTO.builder()
                 .sections(List.of(

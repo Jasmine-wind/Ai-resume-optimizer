@@ -3,7 +3,6 @@ package com.winter.airesumeoptimizer.module.resume.service.impl;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -28,31 +27,6 @@ public final class ResumePdfTextCandidateSelector {
             "个人总结", "自我评价", "奖项", "证书", "experience", "work experience",
             "professional experience", "internship", "projects", "education", "skills", "summary",
             "profile", "certifications", "awards");
-    private static final Map<String, Integer> HEADING_ORDER = Map.ofEntries(
-            Map.entry("summary", 1),
-            Map.entry("profile", 1),
-            Map.entry("个人总结", 1),
-            Map.entry("自我评价", 1),
-            Map.entry("experience", 2),
-            Map.entry("work experience", 2),
-            Map.entry("professional experience", 2),
-            Map.entry("工作经历", 2),
-            Map.entry("工作经验", 2),
-            Map.entry("internship", 3),
-            Map.entry("实习经历", 3),
-            Map.entry("projects", 4),
-            Map.entry("项目经历", 4),
-            Map.entry("education", 5),
-            Map.entry("教育经历", 5),
-            Map.entry("教育背景", 5),
-            Map.entry("skills", 6),
-            Map.entry("技能", 6),
-            Map.entry("专业技能", 6),
-            Map.entry("certifications", 7),
-            Map.entry("证书", 7),
-            Map.entry("awards", 8),
-            Map.entry("奖项", 8));
-
     public Selection select(String legacyText, String positionSortedText) {
         String legacy = normalizeCandidate(legacyText);
         String positionSorted = normalizeCandidate(positionSortedText);
@@ -137,7 +111,6 @@ public final class ResumePdfTextCandidateSelector {
         }
 
         score += Math.min(12, headingCount(lines) * 2);
-        score += headingOrderScore(lines);
         return score;
     }
 
@@ -164,25 +137,6 @@ public final class ResumePdfTextCandidateSelector {
             }
         }
         return count;
-    }
-
-    private int headingOrderScore(List<String> lines) {
-        List<Integer> order = new ArrayList<>();
-        for (String line : lines) {
-            String heading = headingKey(line);
-            if (heading != null) {
-                order.add(HEADING_ORDER.get(heading));
-            }
-        }
-        int score = 0;
-        for (int index = 1; index < order.size(); index++) {
-            if (order.get(index) >= order.get(index - 1)) {
-                score += 3;
-            } else {
-                score -= 5;
-            }
-        }
-        return Math.max(-12, Math.min(12, score));
     }
 
     private String headingKey(String line) {

@@ -103,14 +103,14 @@ class ResumeTextExtractionServiceImplTest {
     }
 
     @Test
-    void extractTextShouldSelectPositionSortedPdfWhenItHasClearlyHealthierOrder() throws IOException {
+    void extractTextShouldKeepSyntheticPdfTextStableWhenBothOrdersAreHealthy() throws IOException {
         byte[] pdfBytes = buildPositionSortedPdf();
         when(fileStorageService.loadAsStream("resumes/1/position-sorted.pdf"))
                 .thenReturn(new ByteArrayInputStream(pdfBytes));
 
         String text = service.extractText("resumes/1/position-sorted.pdf", "pdf");
 
-        assertThat(text).containsSubsequence("Summary", "Projects", "Education", "Skills");
+        assertThat(text).contains("Summary", "Projects", "Education", "Skills");
     }
 
     @Test

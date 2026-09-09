@@ -687,8 +687,7 @@ describe('ResumeEditor', () => {
     ).toBe('true')
   })
 
-  it('reorders a section only after a desktop hold-drag and emits one document update', async () => {
-    vi.useFakeTimers()
+  it('reorders a section from its explicit handle without a hold delay', async () => {
     const document = makeDocument()
     document.sections.push({ id: 's2', kind: 'PROJECT', title: '项目经历', entries: [] })
     const onChange = vi.fn()
@@ -698,131 +697,194 @@ describe('ResumeEditor', () => {
     const originalRect = HTMLElement.prototype.getBoundingClientRect
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
       if (this.getAttribute('data-section-id') === 's1') {
-        return {
-          top: 0,
-          bottom: 100,
-          height: 100,
-          left: 0,
-          right: 500,
-          width: 500,
-          x: 0,
-          y: 0,
-          toJSON: () => ({}),
-        }
+        return { top: 0, bottom: 100, height: 100, left: 0, right: 500, width: 500, x: 0, y: 0, toJSON: () => ({}) }
       }
       if (this.getAttribute('data-section-id') === 's2') {
-        return {
-          top: 120,
-          bottom: 220,
-          height: 100,
-          left: 0,
-          right: 500,
-          width: 500,
-          x: 0,
-          y: 120,
-          toJSON: () => ({}),
-        }
+        return { top: 120, bottom: 220, height: 100, left: 0, right: 500, width: 500, x: 0, y: 120, toJSON: () => ({}) }
       }
       return originalRect.call(this)
     })
 
-    expect(wrapper.find('.section-drag-handle').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('上移')
-    expect(wrapper.text()).not.toContain('下移')
-    const dispatchPointer = (
-      type: string,
-      target: EventTarget,
-      values: Record<string, unknown>,
-    ) => {
+    expect(wrapper.find('.section-drag-handle').exists()).toBe(true)
+    await firstSection.get('.section-title-display').trigger('click')
+    expect(wrapper.find('.section-title-input').exists()).toBe(true)
+    expect(onChange).not.toHaveBeenCalled()
+
+    const dispatchPointer = (type: string, target: EventTarget, values: Record<string, unknown>) => {
       const event = new Event(type, { bubbles: true, cancelable: true })
       Object.defineProperties(event, values)
       target.dispatchEvent(event)
     }
-    dispatchPointer('pointerdown', firstSection.element, {
-      button: { value: 0 },
-      pointerType: { value: 'mouse' },
-      pointerId: { value: 1 },
-      clientX: { value: 12 },
-      clientY: { value: 20 },
+    const handle = firstSection.get('.section-drag-handle')
+    dispatchPointer('pointerdown', handle.element, {
+      button: { value: 0 }, pointerType: { value: 'mouse' }, pointerId: { value: 1 },
+      clientX: { value: 12 }, clientY: { value: 20 },
     })
-    dispatchPointer('pointerup', firstSection.element, {
-      button: { value: 0 },
-      pointerType: { value: 'mouse' },
-      pointerId: { value: 1 },
-      clientX: { value: 12 },
-      clientY: { value: 20 },
-    })
-    expect(onChange).not.toHaveBeenCalled()
-    expect(vi.getTimerCount()).toBe(0)
-
-    const textarea = firstSection.get('textarea')
-    dispatchPointer('pointerdown', textarea.element, {
-      button: { value: 0 },
-      pointerType: { value: 'mouse' },
-      pointerId: { value: 2 },
-      clientX: { value: 12 },
-      clientY: { value: 20 },
-    })
-    await vi.advanceTimersByTimeAsync(230)
-    await nextTick()
     expect(firstSection.classes()).not.toContain('is-reorder-source')
-    dispatchPointer('pointerup', textarea.element, {
-      button: { value: 0 },
-      pointerType: { value: 'mouse' },
-      pointerId: { value: 2 },
-      clientX: { value: 12 },
-      clientY: { value: 20 },
-    })
-
-    dispatchPointer('pointerdown', firstSection.element, {
-      button: { value: 0 },
-      pointerType: { value: 'mouse' },
-      pointerId: { value: 3 },
-      clientX: { value: 12 },
-      clientY: { value: 20 },
-    })
-    await vi.advanceTimersByTimeAsync(230)
-    await nextTick()
-    dispatchPointer('pointerup', firstSection.element, {
-      button: { value: 0 },
-      pointerType: { value: 'mouse' },
-      pointerId: { value: 3 },
-      clientX: { value: 12 },
-      clientY: { value: 20 },
-    })
-    expect(onChange).not.toHaveBeenCalled()
-
-    dispatchPointer('pointerdown', firstSection.element, {
-      button: { value: 0 },
-      pointerType: { value: 'mouse' },
-      pointerId: { value: 1 },
-      clientX: { value: 12 },
-      clientY: { value: 20 },
-    })
-    expect(vi.getTimerCount()).toBe(1)
-    await vi.advanceTimersByTimeAsync(230)
-    await nextTick()
-    expect(firstSection.classes()).toContain('is-reorder-source')
     const move = new Event('pointermove', { bubbles: true, cancelable: true })
-    Object.defineProperties(move, { clientX: { value: 20 }, clientY: { value: 210 } })
+    Object.defineProperties(move, {
+      pointerId: { value: 1 }, clientX: { value: 20 }, clientY: { value: 210 },
+    })
     window.dispatchEvent(move)
     await nextTick()
+    expect(firstSection.classes()).toContain('is-reorder-source')
     expect(secondSection.classes()).toContain('is-drop-after')
-    const drop = new Event('pointerup', { bubbles: true, cancelable: true })
-    Object.defineProperties(drop, { clientX: { value: 20 }, clientY: { value: 210 } })
-    window.dispatchEvent(drop)
+    dispatchPointer('pointerup', window, {
+      pointerId: { value: 1 }, clientX: { value: 20 }, clientY: { value: 210 },
+    })
     await nextTick()
 
     expect(onChange).toHaveBeenCalledTimes(1)
-    expect(
-      (onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id),
-    ).toEqual(['s2', 's1'])
-    expect(
-      (onChange.mock.lastCall![0] as ResumeDocument).sections[1]?.entries[0]?.bullets[0]?.id,
-    ).toBe('b1')
-    wrapper.unmount()
+    const changed = onChange.mock.lastCall![0] as ResumeDocument
+    expect(changed.sections.map((section) => section.id)).toEqual(['s2', 's1'])
+    expect(changed.sections[1]?.entries[0]?.id).toBe('e1')
+    expect(changed.sections[1]?.entries[0]?.bullets[0]?.id).toBe('b1')
     vi.restoreAllMocks()
-    vi.useRealTimers()
+    wrapper.unmount()
+  })
+
+  it('reorders entries within one section and keeps every nested id', async () => {
+    const entry = (id: string, bulletId: string) => ({
+      id,
+      organization: id,
+      role: '工程师',
+      school: null,
+      degree: null,
+      major: null,
+      startDate: null,
+      endDate: null,
+      location: null,
+      group: null,
+      skillItems: null,
+      bullets: [{ id: bulletId, text: `${id} bullet` }],
+    })
+    const document: ResumeDocument = {
+      ...makeDocument(),
+      sections: [{ ...makeDocument().sections[0]!, entries: [entry('a', 'ba'), entry('b', 'bb'), entry('c', 'bc')] }],
+    }
+    const onChange = vi.fn()
+    const wrapper = mount(ResumeEditor, { props: { document, onChange } })
+    const originalRect = HTMLElement.prototype.getBoundingClientRect
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const sectionId = this.getAttribute('data-section-id')
+      const entryId = this.getAttribute('data-entry-id')
+      if (sectionId === 's1') return { top: 0, bottom: 300, height: 300, left: 0, right: 500, width: 500, x: 0, y: 0, toJSON: () => ({}) }
+      const tops: Record<string, number> = { a: 10, b: 80, c: 150 }
+      if (entryId && tops[entryId] !== undefined) {
+        const top = tops[entryId]
+        return { top, bottom: top + 50, height: 50, left: 0, right: 500, width: 500, x: 0, y: top, toJSON: () => ({}) }
+      }
+      return originalRect.call(this)
+    })
+    const dispatch = (type: string, target: EventTarget, pointerId: number, clientY: number) => {
+      const event = new Event(type, { bubbles: true, cancelable: true })
+      Object.defineProperties(event, { pointerId: { value: pointerId }, button: { value: 0 }, clientX: { value: 10 }, clientY: { value: clientY } })
+      target.dispatchEvent(event)
+    }
+    const drag = async (sourceId: string, targetY: number, pointerId: number) => {
+      const handle = wrapper.get(`[data-entry-id="${sourceId}"] .entry-drag-handle`)
+      dispatch('pointerdown', handle.element, pointerId, 30)
+      const move = new Event('pointermove', { bubbles: true, cancelable: true })
+      Object.defineProperties(move, { pointerId: { value: pointerId }, clientX: { value: 10 }, clientY: { value: targetY } })
+      window.dispatchEvent(move)
+      await nextTick()
+      dispatch('pointerup', window, pointerId, targetY)
+      await nextTick()
+    }
+
+    await drag('b', 15, 1)
+    let changed = onChange.mock.lastCall![0] as ResumeDocument
+    expect(changed.sections[0]?.entries.map((item) => item.id)).toEqual(['b', 'a', 'c'])
+    expect(changed.sections[0]?.entries[0]?.bullets[0]?.id).toBe('bb')
+    await wrapper.setProps({ document: changed })
+    await drag('a', 180, 2)
+    changed = onChange.mock.lastCall![0] as ResumeDocument
+    expect(changed.sections[0]?.entries.map((item) => item.id)).toEqual(['b', 'c', 'a'])
+    expect(changed.sections[0]?.entries[2]?.bullets[0]?.id).toBe('ba')
+    await wrapper.setProps({ document: changed })
+    await wrapper.get('[data-entry-id="b"] .entry-drag-handle').trigger('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+    })
+    const keyboardChanged = onChange.mock.lastCall![0] as ResumeDocument
+    expect(keyboardChanged.sections[0]?.entries.map((item) => item.id)).toEqual(['c', 'b', 'a'])
+    expect(onChange).toHaveBeenCalledTimes(3)
+    vi.restoreAllMocks()
+    wrapper.unmount()
+  })
+
+  it('moves entries once across compatible sections, rejects incompatible sections, and accepts empty targets', async () => {
+    const makeEntry = (id: string, bulletId: string) => ({
+      id, organization: id, role: null, school: null, degree: null, major: null,
+      startDate: null, endDate: null, location: null, group: null, skillItems: null,
+      bullets: [{ id: bulletId, text: id }],
+    })
+    const makeCrossDocument = (targetKind: string, targetEntries: ResumeDocument['sections'][number]['entries']) => ({
+      schemaVersion: 'RESUME_DOCUMENT_V1',
+      basics: { name: '测试', contacts: [] },
+      sections: [
+        { id: 'source', kind: 'EXPERIENCE', title: '正式工作经历', entries: [makeEntry('entry-a', 'bullet-a')] },
+        { id: 'target', kind: targetKind, title: targetKind === 'EDUCATION' ? '教育经历' : '实习经历', entries: targetEntries },
+      ],
+    }) as ResumeDocument
+    const originalRect = HTMLElement.prototype.getBoundingClientRect
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      const sectionId = this.getAttribute('data-section-id')
+      const entryId = this.getAttribute('data-entry-id')
+      if (sectionId === 'source') return { top: 0, bottom: 100, height: 100, left: 0, right: 500, width: 500, x: 0, y: 0, toJSON: () => ({}) }
+      if (sectionId === 'target') return { top: 120, bottom: 300, height: 180, left: 0, right: 500, width: 500, x: 0, y: 120, toJSON: () => ({}) }
+      if (entryId === 'entry-b') return { top: 140, bottom: 200, height: 60, left: 0, right: 500, width: 500, x: 0, y: 140, toJSON: () => ({}) }
+      return originalRect.call(this)
+    })
+    const dispatch = (type: string, target: EventTarget, pointerId: number, clientY: number) => {
+      const event = new Event(type, { bubbles: true, cancelable: true })
+      Object.defineProperties(event, { pointerId: { value: pointerId }, button: { value: 0 }, clientX: { value: 10 }, clientY: { value: clientY } })
+      target.dispatchEvent(event)
+    }
+    const runDrag = async (wrapper: ReturnType<typeof mount>, pointerId: number) => {
+      const handle = wrapper.get('[data-entry-id="entry-a"] .entry-drag-handle')
+      dispatch('pointerdown', handle.element, pointerId, 30)
+      const move = new Event('pointermove', { bubbles: true, cancelable: true })
+      Object.defineProperties(move, { pointerId: { value: pointerId }, clientX: { value: 10 }, clientY: { value: 170 } })
+      window.dispatchEvent(move)
+      await nextTick()
+      dispatch('pointerup', window, pointerId, 170)
+      await nextTick()
+    }
+
+    const compatible = mount(ResumeEditor, {
+      props: { document: makeCrossDocument('EXPERIENCE', [makeEntry('entry-b', 'bullet-b')]) },
+    })
+    const compatibleChange = vi.fn()
+    await compatible.setProps({ onChange: compatibleChange })
+    await runDrag(compatible, 1)
+    expect(compatibleChange).toHaveBeenCalledTimes(1)
+    const moved = compatibleChange.mock.lastCall![0] as ResumeDocument
+    expect(moved.sections[0]?.entries).toEqual([])
+    expect(moved.sections[1]?.entries.map((item) => item.id)).toEqual(['entry-b', 'entry-a'])
+    expect(moved.sections[1]?.entries[1]?.bullets[0]?.id).toBe('bullet-a')
+    compatible.unmount()
+
+    const incompatibleChange = vi.fn()
+    const incompatible = mount(ResumeEditor, {
+      props: { document: makeCrossDocument('EDUCATION', [makeEntry('entry-b', 'bullet-b')]), onChange: incompatibleChange },
+    })
+    await runDrag(incompatible, 2)
+    expect(incompatibleChange).not.toHaveBeenCalled()
+    expect(incompatible.find('.editor-section.is-entry-drop-end').exists()).toBe(false)
+    incompatible.unmount()
+
+    const emptyChange = vi.fn()
+    const empty = mount(ResumeEditor, {
+      props: { document: makeCrossDocument('EXPERIENCE', []), onChange: emptyChange },
+    })
+    await runDrag(empty, 3)
+    expect(emptyChange).toHaveBeenCalledTimes(1)
+    const emptyMoved = emptyChange.mock.lastCall![0] as ResumeDocument
+    expect(emptyMoved.sections[0]?.entries).toHaveLength(0)
+    expect(emptyMoved.sections[1]?.entries[0]?.id).toBe('entry-a')
+    empty.unmount()
+    vi.restoreAllMocks()
   })
 
   it('does not start section reorder when a bullet delete action receives pointerdown', async () => {
@@ -841,7 +903,7 @@ describe('ResumeEditor', () => {
     vi.useRealTimers()
   })
 
-  it('supports keyboard section reorder without exposing a sorting control', async () => {
+  it('supports keyboard section reorder alongside the visible drag handle', async () => {
     const document = makeDocument()
     document.sections.push({ id: 's2', kind: 'PROJECT', title: '项目经历', entries: [] })
     const onChange = vi.fn()
@@ -855,7 +917,8 @@ describe('ResumeEditor', () => {
     expect(
       (onChange.mock.lastCall![0] as ResumeDocument).sections.map((section) => section.id),
     ).toEqual(['s2', 's1'])
-    expect(wrapper.text()).not.toContain('拖动排序')
+    expect(wrapper.find('.section-drag-handle').exists()).toBe(true)
+    expect(wrapper.text()).toContain('拖动章节标题旁的排序按钮')
   })
 
   it('exits contextual name editing with Escape', async () => {

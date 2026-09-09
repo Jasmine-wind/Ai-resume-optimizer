@@ -42,6 +42,72 @@ const document = {
   ],
 }
 
+const reorderEntry = (id: string, organization: string, bulletId: string) => ({
+  id,
+  organization,
+  role: '后端工程师',
+  school: null,
+  degree: null,
+  major: null,
+  startDate: '2022',
+  endDate: '至今',
+  location: null,
+  group: null,
+  skillItems: null,
+  bullets: [{ id: bulletId, text: `${organization} 的工作要点` }],
+})
+
+const reorderDocument = {
+  ...document,
+  sections: [
+    {
+      id: 'experience',
+      kind: 'EXPERIENCE',
+      title: '工作经历',
+      entries: [
+        reorderEntry('exp-a', '公司 A', 'bullet-a'),
+        reorderEntry('exp-b', '公司 B', 'bullet-b'),
+        reorderEntry('exp-c', '公司 C', 'bullet-c'),
+      ],
+    },
+    {
+      id: 'project',
+      kind: 'PROJECT',
+      title: '项目经历',
+      entries: [reorderEntry('project-a', '项目 A', 'project-bullet-a')],
+    },
+    {
+      id: 'experience-secondary',
+      kind: 'EXPERIENCE',
+      title: '实习经历',
+      entries: [reorderEntry('exp-d', '实习公司', 'bullet-d')],
+    },
+    {
+      id: 'education',
+      kind: 'EDUCATION',
+      title: '教育经历',
+      entries: [
+        {
+          ...reorderEntry('education-a', '大学', 'education-bullet-a'),
+          organization: null,
+          school: '大学',
+          role: null,
+          degree: '本科',
+        },
+      ],
+    },
+  ],
+}
+
+const crossDocument = {
+  ...reorderDocument,
+  sections: [
+    reorderDocument.sections[0],
+    reorderDocument.sections[2],
+    reorderDocument.sections[3],
+  ],
+}
+
 const requirement = (id: number, level: string) => ({
   evidenceRequirementId: id,
   requirementText: id === 3 ? '具备 Redis 缓存设计经验' : `岗位要求 ${id}`,
@@ -164,6 +230,8 @@ async function mockWorkspace(
     longResume?: boolean
     lowValueSuggestion?: boolean
     reviewSuggestion?: boolean
+    reorderFixture?: boolean
+    crossFixture?: boolean
   } = {},
 ) {
   await page.addInitScript(() => localStorage.setItem('ai-resume-token', 'workspace-frame-token'))
@@ -179,17 +247,30 @@ async function mockWorkspace(
     ),
   )
   let saveAttempts = 0
-  await page.route('**/api/workspace/42/content', (route) => {
+  let workspaceDocument = JSON.parse(
+    JSON.stringify(
+      options.crossFixture
+        ? crossDocument
+        : options.reorderFixture
+          ? reorderDocument
+          : options.longResume
+            ? longDocument
+            : document,
+    ),
+  )
+  await page.route('**/api/workspace/42/content', async (route) => {
     if (route.request().method() === 'GET') {
       return route.fulfill(
         response({
           optimizationTaskId: 42,
-          revision: 3,
-          document: options.longResume ? longDocument : document,
+          revision: 3 + saveAttempts,
+          document: workspaceDocument,
         }),
       )
     }
     saveAttempts += 1
+    const body = route.request().postDataJSON() as { document?: unknown }
+    if (body.document) workspaceDocument = body.document
     if (options.failSaveOnce && saveAttempts === 1) {
       return route.fulfill({
         status: 200,
@@ -198,7 +279,7 @@ async function mockWorkspace(
       })
     }
     return route.fulfill(
-      response({ saved: true, conflict: false, revision: 3 + saveAttempts, document: null }),
+      response({ saved: true, conflict: false, revision: 3 + saveAttempts, document: workspaceDocument }),
     )
   })
   const mockedRequirements = Array.from(
@@ -368,6 +449,92 @@ test.describe('Workspace editor frame', () => {
     } finally {
       await context.close()
     }
+  })
+
+  test('reorders sections and entries through handles, persists after reload, and preserves ids', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await mockWorkspace(page, { reorderFixture: true })
+    await page.goto('/workspace/42?requirement=3')
+    await expect(page.locator('.section-drag-handle')).toHaveCount(4)
+
+    const projectHandle = page.locator('[data-section-id="project"] .section-drag-handle')
+    const experienceSection = page.locator('[data-section-id="experience"]')
+    const experienceBox = await experienceSection.boundingBox()
+    expect(experienceBox).not.toBeNull()
+    const projectBox = await projectHandle.boundingBox()
+    expect(projectBox).not.toBeNull()
+    await page.mouse.move(projectBox!.x + projectBox!.width / 2, projectBox!.y + projectBox!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(experienceBox!.x + 20, experienceBox!.y + 3, { steps: 8 })
+    await page.mouse.up()
+    await expect
+      .poll(() => page.locator('.editor-section').evaluateAll((items) => items.map((item) => item.getAttribute('data-section-id'))))
+      .toEqual(['project', 'experience', 'experience-secondary', 'education'])
+    await page.waitForTimeout(1_000)
+    await page.reload()
+    await expect(page.locator('[data-section-id="project"]')).toBeVisible()
+    await expect
+      .poll(() => page.locator('.editor-section').evaluateAll((items) => items.map((item) => item.getAttribute('data-section-id'))))
+      .toEqual(['project', 'experience', 'experience-secondary', 'education'])
+
+    const entryA = page.locator('[data-entry-id="exp-a"]')
+    const entryB = page.locator('[data-entry-id="exp-b"]')
+    const entryABox = await entryA.boundingBox()
+    const entryBHandleBox = await entryB.locator('.entry-drag-handle').boundingBox()
+    expect(entryABox).not.toBeNull()
+    expect(entryBHandleBox).not.toBeNull()
+    await page.mouse.move(entryBHandleBox!.x + entryBHandleBox!.width / 2, entryBHandleBox!.y + entryBHandleBox!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(entryABox!.x + 30, entryABox!.y + 2, { steps: 8 })
+    await page.mouse.up()
+    await expect
+      .poll(() => page.locator('[data-section-id="experience"] .editor-entry').evaluateAll((items) => items.map((item) => item.getAttribute('data-entry-id'))))
+      .toEqual(['exp-b', 'exp-a', 'exp-c'])
+    await page.waitForTimeout(1_000)
+    await page.reload()
+    await expect
+      .poll(() => page.locator('[data-section-id="experience"] .editor-entry').evaluateAll((items) => items.map((item) => item.getAttribute('data-entry-id'))))
+      .toEqual(['exp-b', 'exp-a', 'exp-c'])
+    await expect(page.locator('[data-bullet-id="bullet-b"]')).toHaveCount(1)
+    await expect(page.locator('[data-bullet-id="bullet-a"]')).toHaveCount(1)
+  })
+
+  test('moves an entry across same-kind sections and refuses an incompatible drop', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await mockWorkspace(page, { crossFixture: true })
+    await page.goto('/workspace/42?requirement=3')
+
+    const source = page.locator('[data-entry-id="exp-d"]')
+    const target = page.locator('[data-entry-id="exp-a"]')
+    const sourceHandle = await source.locator('.entry-drag-handle').boundingBox()
+    const targetBox = await target.boundingBox()
+    expect(sourceHandle).not.toBeNull()
+    expect(targetBox).not.toBeNull()
+    await page.mouse.move(sourceHandle!.x + sourceHandle!.width / 2, sourceHandle!.y + sourceHandle!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(targetBox!.x + 30, targetBox!.y + targetBox!.height - 2, { steps: 8 })
+    await page.mouse.up()
+    await expect
+      .poll(() => page.locator('[data-section-id="experience"] .editor-entry').evaluateAll((items) => items.map((item) => item.getAttribute('data-entry-id'))))
+      .toEqual(['exp-a', 'exp-d', 'exp-b', 'exp-c'])
+    await page.waitForTimeout(1_000)
+    await page.reload()
+    await expect(page.locator('[data-section-id="experience"] [data-entry-id="exp-d"]')).toBeVisible()
+
+    const movedSource = page.locator('[data-entry-id="exp-d"]')
+    const education = page.locator('[data-entry-id="education-a"]')
+    const movedHandle = await movedSource.locator('.entry-drag-handle').boundingBox()
+    const educationBox = await education.boundingBox()
+    expect(movedHandle).not.toBeNull()
+    expect(educationBox).not.toBeNull()
+    await page.mouse.move(movedHandle!.x + movedHandle!.width / 2, movedHandle!.y + movedHandle!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(educationBox!.x + 30, educationBox!.y + 2, { steps: 8 })
+    await page.mouse.up()
+    await expect(page.locator('[data-section-id="experience"] [data-entry-id="exp-d"]')).toBeVisible()
+    await expect(page.locator('[data-section-id="education"] [data-entry-id="exp-d"]')).toHaveCount(0)
   })
 
   test('keeps requirements and document scrollable while inspector stays concise', async ({

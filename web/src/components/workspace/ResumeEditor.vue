@@ -64,24 +64,28 @@ const compactContactRows = (contacts: ResumeDocumentBasics['contacts']) => {
 
 const visibleContacts = computed(() => compactContactRows(props.document.basics.contacts ?? []))
 
-const SECTION_REORDER_HOLD_DELAY_MS = 220
-const SECTION_REORDER_MOVE_THRESHOLD = 6
+const REORDER_MOVE_THRESHOLD = 4
 
-type SectionReorderIntent = {
-  sectionId: string
+type DragState = {
+  type: 'section' | 'entry'
+  sourceSectionId: string
+  sourceEntryId?: string
   pointerId: number
   startX: number
   startY: number
   clientX: number
   clientY: number
-  timer: number | null
   active: boolean
+  captureElement: HTMLElement | null
 }
 
-const sectionReorderIntent = ref<SectionReorderIntent | null>(null)
-const draggedSectionId = ref<string | null>(null)
-const dropSectionId = ref<string | null>(null)
-const dropBefore = ref(false)
+type DropTarget =
+  | { type: 'section'; targetSectionId: string; position: 'before' | 'after' }
+  | { type: 'entry'; targetSectionId: string; targetEntryId?: string; position: 'before' | 'after' | 'end' }
+
+const dragState = ref<DragState | null>(null)
+const dropTarget = ref<DropTarget | null>(null)
+const entryDropUnavailable = ref(false)
 const reorderAnnouncement = ref('')
 let autoScrollFrame: number | null = null
 const editingName = ref(false)
@@ -265,59 +269,156 @@ const moveSection = (index: number, delta: number) => {
   })
 }
 
-const isInteractiveReorderTarget = (target: EventTarget | null) => {
-  return (
-    target instanceof Element &&
-    Boolean(
-      target.closest(
-        'input, textarea, button, a, select, summary, .el-input, .el-input__wrapper, .el-textarea, [role="textbox"], [contenteditable="true"], [contenteditable=""], [role="button"]',
-      ),
-    )
-  )
-}
+const areEntryKindsCompatible = (sourceKind: string, targetKind: string) =>
+  sourceKind === targetKind
 
-const clearSectionReorder = () => {
-  const intent = sectionReorderIntent.value
-  if (intent?.timer !== null && intent?.timer !== undefined) window.clearTimeout(intent.timer)
+const clearDrag = () => {
+  const current = dragState.value
+  if (
+    current?.captureElement &&
+    typeof current.captureElement.hasPointerCapture === 'function' &&
+    current.captureElement.hasPointerCapture(current.pointerId)
+  ) {
+    current.captureElement.releasePointerCapture?.(current.pointerId)
+  }
   if (autoScrollFrame !== null) {
     window.cancelAnimationFrame(autoScrollFrame)
     autoScrollFrame = null
   }
-  sectionReorderIntent.value = null
-  draggedSectionId.value = null
-  dropSectionId.value = null
-  dropBefore.value = false
+  dragState.value = null
+  dropTarget.value = null
+  entryDropUnavailable.value = false
 }
 
-const setDropTarget = (clientY: number) => {
-  const sourceId = draggedSectionId.value
-  if (!sourceId || !editorRoot.value) return
+const sectionIsDragSource = (sectionId: string) =>
+  dragState.value?.active === true &&
+  dragState.value.type === 'section' &&
+  dragState.value.sourceSectionId === sectionId
+
+const entryIsDragSource = (sectionId: string, entryId: string) =>
+  dragState.value?.active === true &&
+  dragState.value.type === 'entry' &&
+  dragState.value.sourceSectionId === sectionId &&
+  dragState.value.sourceEntryId === entryId
+
+const sectionDropClass = (sectionId: string, position: 'before' | 'after') =>
+  dropTarget.value?.type === 'section' &&
+  dropTarget.value.targetSectionId === sectionId &&
+  dropTarget.value.position === position
+
+const entryDropClass = (sectionId: string, entryId: string, position: 'before' | 'after') =>
+  dropTarget.value?.type === 'entry' &&
+  dropTarget.value.targetSectionId === sectionId &&
+  dropTarget.value.targetEntryId === entryId &&
+  dropTarget.value.position === position
+
+const entryDropEndClass = (sectionId: string) =>
+  dropTarget.value?.type === 'entry' &&
+  dropTarget.value.targetSectionId === sectionId &&
+  dropTarget.value.position === 'end'
+
+const beginDrag = (state: DragState, event: PointerEvent) => {
+  if (event.button !== undefined && event.button !== 0) return
+  clearDrag()
+  dragState.value = state
+  const handle = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  state.captureElement = handle
+  handle?.setPointerCapture?.(event.pointerId)
+}
+
+const sectionDropTargetAt = (clientY: number) => {
+  const state = dragState.value
+  if (!state || state.type !== 'section' || !editorRoot.value) return
   const sections = Array.from(
     editorRoot.value.querySelectorAll<HTMLElement>('.editor-section[data-section-id]'),
-  ).filter((section) => section.dataset.sectionId !== sourceId)
+  ).filter((element) => element.dataset.sectionId !== state.sourceSectionId)
   if (sections.length === 0) {
-    dropSectionId.value = null
+    dropTarget.value = null
     return
   }
-
-  let nextTarget = sections[sections.length - 1]
-  let insertBefore = false
+  let target = sections[sections.length - 1]
+  let position: 'before' | 'after' = 'after'
   for (const section of sections) {
     const rect = section.getBoundingClientRect()
     if (clientY < rect.top + rect.height / 2) {
-      nextTarget = section
-      insertBefore = true
+      target = section
+      position = 'before'
       break
     }
   }
-  dropSectionId.value = nextTarget?.dataset.sectionId ?? null
-  dropBefore.value = insertBefore
+  const targetSectionId = target?.dataset.sectionId
+  dropTarget.value = targetSectionId
+    ? { type: 'section', targetSectionId, position }
+    : null
+}
+
+const findSectionAtPointer = (clientY: number, sourceKind: string) => {
+  if (!editorRoot.value) return { section: null, incompatible: false }
+  const sectionElements = Array.from(
+    editorRoot.value.querySelectorAll<HTMLElement>('.editor-section[data-section-id]'),
+  )
+  for (const element of sectionElements) {
+    const rect = element.getBoundingClientRect()
+    if (clientY < rect.top || clientY > rect.bottom) continue
+    const section = props.document.sections.find((item) => item.id === element.dataset.sectionId)
+    if (!section) continue
+    return { section, incompatible: !areEntryKindsCompatible(sourceKind, section.kind) }
+  }
+  return { section: null, incompatible: false }
+}
+
+const entryDropTargetAt = (clientY: number) => {
+  const state = dragState.value
+  if (!state || state.type !== 'entry' || !editorRoot.value) return
+  const sourceSection = props.document.sections.find((item) => item.id === state.sourceSectionId)
+  if (!sourceSection) return
+  const located = findSectionAtPointer(clientY, sourceSection.kind)
+  entryDropUnavailable.value = located.incompatible
+  if (!located.section || located.incompatible) {
+    dropTarget.value = null
+    return
+  }
+
+  const sectionElement = Array.from(
+    editorRoot.value.querySelectorAll<HTMLElement>('.editor-section[data-section-id]'),
+  ).find((element) => element.dataset.sectionId === located.section?.id)
+  if (!sectionElement) {
+    dropTarget.value = null
+    return
+  }
+  const entries = Array.from(
+    sectionElement.querySelectorAll<HTMLElement>('.editor-entry[data-entry-id]'),
+  ).filter((element) => element.dataset.entryId !== state.sourceEntryId)
+  if (entries.length === 0) {
+    dropTarget.value = { type: 'entry', targetSectionId: located.section.id, position: 'end' }
+    return
+  }
+
+  let target = entries[entries.length - 1]
+  let position: 'before' | 'after' = 'after'
+  for (const entry of entries) {
+    const rect = entry.getBoundingClientRect()
+    if (clientY < rect.top + rect.height / 2) {
+      target = entry
+      position = 'before'
+      break
+    }
+  }
+  const targetEntryId = target?.dataset.entryId
+  dropTarget.value = targetEntryId
+    ? { type: 'entry', targetSectionId: located.section.id, targetEntryId, position }
+    : null
+}
+
+const updateDropTarget = (clientY: number) => {
+  if (dragState.value?.type === 'section') sectionDropTargetAt(clientY)
+  else if (dragState.value?.type === 'entry') entryDropTargetAt(clientY)
 }
 
 const updateAutoScroll = (clientY: number) => {
   const container = editorRoot.value?.closest<HTMLElement>('.resume-stage-scroll')
-  const intent = sectionReorderIntent.value
-  if (!container || !intent?.active) return
+  const state = dragState.value
+  if (!container || !state?.active) return
   const rect = container.getBoundingClientRect()
   const edge = Math.min(80, Math.max(48, rect.height * 0.14))
   const direction = clientY < rect.top + edge ? -1 : clientY > rect.bottom - edge ? 1 : 0
@@ -329,15 +430,10 @@ const updateAutoScroll = (clientY: number) => {
     return
   }
   if (autoScrollFrame !== null) return
-
   const scroll = () => {
-    const current = sectionReorderIntent.value
-    if (!current?.active) {
-      autoScrollFrame = null
-      return
-    }
+    const current = dragState.value
     const currentContainer = editorRoot.value?.closest<HTMLElement>('.resume-stage-scroll')
-    if (!currentContainer) {
+    if (!current?.active || !currentContainer) {
       autoScrollFrame = null
       return
     }
@@ -353,102 +449,152 @@ const updateAutoScroll = (clientY: number) => {
       return
     }
     currentContainer.scrollTop += currentDirection * 6
-    setDropTarget(current.clientY)
+    updateDropTarget(current.clientY)
     autoScrollFrame = window.requestAnimationFrame(scroll)
   }
   autoScrollFrame = window.requestAnimationFrame(scroll)
 }
 
 const handleSectionPointerDown = (sectionId: string, event: PointerEvent) => {
-  if (
-    (event.pointerType && event.pointerType !== 'mouse') ||
-    (event.button !== undefined && event.button !== 0) ||
-    isInteractiveReorderTarget(event.target)
+  beginDrag(
+    {
+      type: 'section',
+      sourceSectionId: sectionId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      active: false,
+      captureElement: null,
+    },
+    event,
   )
-    return
-  clearSectionReorder()
-  const intent: SectionReorderIntent = {
-    sectionId,
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    clientX: event.clientX,
-    clientY: event.clientY,
-    timer: null,
-    active: false,
-  }
-  intent.timer = window.setTimeout(() => {
-    const current = sectionReorderIntent.value
-    if (
-      !current ||
-      Math.hypot(current.clientX - current.startX, current.clientY - current.startY) >
-        SECTION_REORDER_MOVE_THRESHOLD
-    )
-      return
-    current.active = true
-    draggedSectionId.value = current.sectionId
-    setDropTarget(current.clientY)
-  }, SECTION_REORDER_HOLD_DELAY_MS)
-  sectionReorderIntent.value = intent
 }
 
-const handleSectionPointerMove = (event: PointerEvent) => {
-  const intent = sectionReorderIntent.value
-  if (!intent || (event.pointerId && event.pointerId !== intent.pointerId)) return
-  intent.clientX = event.clientX
-  intent.clientY = event.clientY
-  if (!intent.active) {
-    if (
-      Math.hypot(intent.clientX - intent.startX, intent.clientY - intent.startY) >
-      SECTION_REORDER_MOVE_THRESHOLD
-    ) {
-      clearSectionReorder()
-    }
-    return
+const handleEntryPointerDown = (sectionId: string, entryId: string, event: PointerEvent) => {
+  beginDrag(
+    {
+      type: 'entry',
+      sourceSectionId: sectionId,
+      sourceEntryId: entryId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      active: false,
+      captureElement: null,
+    },
+    event,
+  )
+}
+
+const handlePointerMove = (event: PointerEvent) => {
+  const state = dragState.value
+  if (!state || event.pointerId !== state.pointerId) return
+  state.clientX = event.clientX
+  state.clientY = event.clientY
+  if (!state.active) {
+    if (Math.hypot(state.clientX - state.startX, state.clientY - state.startY) <= REORDER_MOVE_THRESHOLD)
+      return
+    state.active = true
   }
   event.preventDefault()
-  setDropTarget(intent.clientY)
-  updateAutoScroll(intent.clientY)
+  updateDropTarget(state.clientY)
+  updateAutoScroll(state.clientY)
 }
 
-const finishSectionReorder = () => {
-  const intent = sectionReorderIntent.value
-  if (!intent?.active || !draggedSectionId.value || !dropSectionId.value) {
-    clearSectionReorder()
+const finishPointerDrag = () => {
+  const state = dragState.value
+  const target = dropTarget.value
+  if (!state?.active || !target) {
+    clearDrag()
     return
   }
 
-  const sourceId = draggedSectionId.value
-  const targetId = dropSectionId.value
-  const insertBefore = dropBefore.value
-  const source = props.document.sections.find((section) => section.id === sourceId)
-  const sourceTitle = source ? sectionTitle(source) : ''
-  const sourceIndex = props.document.sections.findIndex((section) => section.id === sourceId)
-  const targetIndex = props.document.sections.findIndex((candidate) => candidate.id === targetId)
-  const targetIndexAfterRemoval = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
-  const nextIndex = insertBefore ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1
-  if (
-    !source ||
-    sourceId === targetId ||
-    sourceIndex < 0 ||
-    targetIndex < 0 ||
-    nextIndex === sourceIndex
-  ) {
-    clearSectionReorder()
-    return
+  if (state.type === 'section' && target.type === 'section') {
+    const sourceIndex = props.document.sections.findIndex((item) => item.id === state.sourceSectionId)
+    const targetIndex = props.document.sections.findIndex((item) => item.id === target.targetSectionId)
+    const targetAfterRemoval = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
+    const nextIndex = target.position === 'before' ? targetAfterRemoval : targetAfterRemoval + 1
+    const source = props.document.sections[sourceIndex]
+    if (source && sourceIndex >= 0 && targetIndex >= 0 && nextIndex !== sourceIndex) {
+      mutate((doc) => {
+        const [section] = doc.sections.splice(sourceIndex, 1)
+        if (section) doc.sections.splice(nextIndex, 0, section)
+      })
+      clearDrag()
+      reorderAnnouncement.value = `已将${sectionTitle(source)}移动到第 ${nextIndex + 1} 项`
+      return
+    }
   }
 
+  if (state.type === 'entry' && target.type === 'entry') {
+    const sourceSection = props.document.sections.find((item) => item.id === state.sourceSectionId)
+    const targetSection = props.document.sections.find((item) => item.id === target.targetSectionId)
+    if (
+      sourceSection &&
+      targetSection &&
+      state.sourceEntryId &&
+      areEntryKindsCompatible(sourceSection.kind, targetSection.kind)
+    ) {
+      const sourceIndex = sourceSection.entries.findIndex((item) => item.id === state.sourceEntryId)
+      const targetIndex = target.targetEntryId
+        ? targetSection.entries.findIndex((item) => item.id === target.targetEntryId)
+        : targetSection.entries.length
+      const sameArray = sourceSection.id === targetSection.id
+      const targetAfterRemoval = sameArray && targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
+      const nextIndex = target.position === 'end'
+        ? targetAfterRemoval
+        : target.position === 'before'
+          ? targetAfterRemoval
+          : targetAfterRemoval + 1
+      if (sourceIndex >= 0 && targetIndex >= 0 && (!sameArray || nextIndex !== sourceIndex)) {
+        const sourceTitle = entryTitle(sourceSection.entries[sourceIndex]!, sourceSection.kind)
+        mutate((doc) => {
+          const nextSource = doc.sections.find((item) => item.id === state.sourceSectionId)
+          const nextTarget = doc.sections.find((item) => item.id === target.targetSectionId)
+          if (!nextSource || !nextTarget) return
+          const [entry] = nextSource.entries.splice(sourceIndex, 1)
+          if (entry) nextTarget.entries.splice(nextIndex, 0, entry)
+        })
+        clearDrag()
+        const positionText = `第 ${nextIndex + 1} 项`
+        reorderAnnouncement.value = `已将${sourceTitle}移动到${positionText}`
+        return
+      }
+    }
+  }
+  clearDrag()
+}
+
+const moveEntryWithKeyboard = (sectionId: string, entryId: string, delta: number) => {
+  const section = props.document.sections.find((item) => item.id === sectionId)
+  if (!section) return
+  const index = section.entries.findIndex((item) => item.id === entryId)
+  const targetIndex = index + delta
+  if (index < 0 || targetIndex < 0 || targetIndex >= section.entries.length) return
+  const entry = section.entries[index]
   mutate((doc) => {
-    const [section] = doc.sections.splice(sourceIndex, 1)
-    if (section) doc.sections.splice(nextIndex, 0, section)
+    const nextSection = doc.sections.find((item) => item.id === sectionId)
+    if (!nextSection) return
+    const [moved] = nextSection.entries.splice(index, 1)
+    if (moved) nextSection.entries.splice(targetIndex, 0, moved)
   })
-  clearSectionReorder()
-  reorderAnnouncement.value = `已将${sourceTitle}移动到第 ${nextIndex + 1} 项`
+  if (entry) reorderAnnouncement.value = `已将${entryTitle(entry, section.kind)}移动到第 ${targetIndex + 1} 项`
+}
+
+const handleEntryKeydown = (sectionId: string, entryId: string, event: KeyboardEvent) => {
+  if (!event.altKey || event.ctrlKey || event.metaKey) return
+  const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0
+  if (delta === 0) return
+  event.preventDefault()
+  moveEntryWithKeyboard(sectionId, entryId, delta)
 }
 
 const handleSectionKeydown = (sectionId: string, index: number, event: KeyboardEvent) => {
-  if (event.target !== event.currentTarget || !event.altKey || event.ctrlKey || event.metaKey)
-    return
+  if (event.target !== event.currentTarget || !event.altKey || event.ctrlKey || event.metaKey) return
   const delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0
   if (delta === 0 || index + delta < 0 || index + delta >= props.document.sections.length) return
   event.preventDefault()
@@ -478,18 +624,18 @@ const handleBasicsEscape = (event: KeyboardEvent) => {
 onMounted(() => {
   document.addEventListener('pointerdown', handleBasicsOutsidePointerDown)
   document.addEventListener('keydown', handleBasicsEscape)
-  window.addEventListener('pointermove', handleSectionPointerMove)
-  window.addEventListener('pointerup', finishSectionReorder)
-  window.addEventListener('pointercancel', clearSectionReorder)
+  window.addEventListener('pointermove', handlePointerMove)
+  window.addEventListener('pointerup', finishPointerDrag)
+  window.addEventListener('pointercancel', clearDrag)
 })
 
 onBeforeUnmount(() => {
-  clearSectionReorder()
+  clearDrag()
   document.removeEventListener('pointerdown', handleBasicsOutsidePointerDown)
   document.removeEventListener('keydown', handleBasicsEscape)
-  window.removeEventListener('pointermove', handleSectionPointerMove)
-  window.removeEventListener('pointerup', finishSectionReorder)
-  window.removeEventListener('pointercancel', clearSectionReorder)
+  window.removeEventListener('pointermove', handlePointerMove)
+  window.removeEventListener('pointerup', finishPointerDrag)
+  window.removeEventListener('pointercancel', clearDrag)
 })
 
 const setContactType = (contactId: string, type: string) => {
@@ -714,7 +860,7 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
 </script>
 
 <template>
-  <div ref="editorRoot" class="resume-editor">
+  <div ref="editorRoot" class="resume-editor" :class="{ 'is-entry-drop-unavailable': entryDropUnavailable }">
     <div class="resume-paper">
       <section class="editor-block editor-basics">
         <header class="editor-block-header editor-basics-header">
@@ -853,9 +999,10 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
             ),
           ),
           'is-empty': section.entries.length === 0,
-          'is-reorder-source': draggedSectionId === section.id,
-          'is-drop-before': dropSectionId === section.id && dropBefore,
-          'is-drop-after': dropSectionId === section.id && !dropBefore,
+          'is-reorder-source': sectionIsDragSource(section.id),
+          'is-drop-before': sectionDropClass(section.id, 'before'),
+          'is-drop-after': sectionDropClass(section.id, 'after'),
+          'is-entry-drop-end': entryDropEndClass(section.id),
         }"
         :ref="(element) => setSectionRef(section.id, element)"
         role="group"
@@ -863,12 +1010,20 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
         :aria-label="`${sectionTitle(section)}，第 ${sectionIndex + 1} 项`"
         aria-describedby="resume-reorder-help"
         aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-        @pointerdown="handleSectionPointerDown(section.id, $event)"
-        @pointerup="finishSectionReorder"
-        @pointercancel="clearSectionReorder"
         @keydown="handleSectionKeydown(section.id, sectionIndex, $event)"
       >
         <header class="editor-block-header">
+          <button
+            type="button"
+            class="section-drag-handle"
+            :aria-label="`调整${sectionTitle(section)}顺序`"
+            aria-describedby="resume-reorder-help"
+            aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+            @pointerdown="handleSectionPointerDown(section.id, $event)"
+            @keydown="handleSectionKeydown(section.id, sectionIndex, $event)"
+          >
+            <span class="drag-grip" aria-hidden="true" />
+          </button>
           <button
             type="button"
             class="section-collapse-toggle"
@@ -919,10 +1074,26 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
             v-for="entry in section.entries"
             :key="entry.id"
             class="editor-entry"
-            :class="{ 'is-generic': !isStructuredSection(section.kind) }"
+            :class="{
+              'is-generic': !isStructuredSection(section.kind),
+              'is-entry-reorder-source': entryIsDragSource(section.id, entry.id),
+              'is-entry-drop-before': entryDropClass(section.id, entry.id, 'before'),
+              'is-entry-drop-after': entryDropClass(section.id, entry.id, 'after'),
+            }"
             :data-entry-id="entry.id"
           >
             <div v-if="isStructuredSection(section.kind)" class="entry-document-heading">
+              <button
+                type="button"
+                class="entry-drag-handle"
+                :aria-label="`调整${entryTitle(entry, section.kind)}顺序`"
+                aria-describedby="resume-entry-reorder-help"
+                aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+                @pointerdown.stop="handleEntryPointerDown(section.id, entry.id, $event)"
+                @keydown="handleEntryKeydown(section.id, entry.id, $event)"
+              >
+                <span class="drag-grip" aria-hidden="true" />
+              </button>
               <template v-if="isEntryEditing(section.id, entry.id)">
                 <div
                   v-if="section.kind === 'SKILL'"
@@ -1112,6 +1283,18 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
                 删除条目
               </button>
             </div>
+            <button
+              v-if="!isStructuredSection(section.kind)"
+              type="button"
+              class="entry-drag-handle entry-drag-handle-generic"
+              :aria-label="`调整${sectionTitle(section)}内容顺序`"
+              aria-describedby="resume-entry-reorder-help"
+              aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+              @pointerdown.stop="handleEntryPointerDown(section.id, entry.id, $event)"
+              @keydown="handleEntryKeydown(section.id, entry.id, $event)"
+            >
+              <span class="drag-grip" aria-hidden="true" />
+            </button>
             <template v-if="section.kind === 'SKILL'">
               <div class="skill-grid">
                 <label class="editor-field">
@@ -1366,7 +1549,8 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
         </div>
       </section>
     </div>
-    <p id="resume-reorder-help" class="sr-only">聚焦章节后使用 Alt 加上、下方向键调整顺序。</p>
+    <p id="resume-reorder-help" class="sr-only">拖动章节标题旁的排序按钮，或聚焦章节后使用 Alt + 上/下方向键调整顺序。</p>
+    <p id="resume-entry-reorder-help" class="sr-only">拖动条目标题旁的排序按钮，或聚焦排序按钮后使用 Alt + 上/下方向键调整当前章节内条目顺序。</p>
     <div class="sr-only" aria-live="polite">{{ reorderAnnouncement }}</div>
   </div>
 </template>
@@ -2515,17 +2699,17 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
   }
 
   .entry-document-heading {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 3px;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    gap: 3px 7px;
   }
 
   .entry-title-display,
   .entry-meta-display {
-    grid-column: 1;
+    grid-column: 2;
   }
 
   .entry-delete-action.is-heading-delete {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1 / span 2;
   }
 
@@ -2556,6 +2740,176 @@ const handleSuggestCommand = (bulletId: string, command: BulletSuggestIntent | '
     height: auto;
     min-height: 24px;
     opacity: 0.55;
+  }
+}
+
+/* Reordering is explicit: only the small contextual grip owns pointer dragging. */
+.editor-section {
+  cursor: default;
+}
+
+.editor-section.is-reorder-source,
+.editor-section.is-reorder-source * {
+  cursor: grabbing !important;
+}
+
+.section-drag-handle,
+.entry-drag-handle {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  color: var(--app-text-muted);
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.section-drag-handle {
+  opacity: 0.5;
+}
+
+.editor-section:hover .section-drag-handle,
+.editor-section:focus-within .section-drag-handle,
+.section-drag-handle:focus-visible,
+.entry-drag-handle:focus-visible,
+.editor-entry:hover .entry-drag-handle,
+.editor-entry:focus-within .entry-drag-handle {
+  color: var(--app-primary-active);
+  background: var(--app-primary-soft);
+  opacity: 1;
+}
+
+.section-drag-handle:focus-visible,
+.entry-drag-handle:focus-visible {
+  outline: 2px solid var(--app-primary);
+  outline-offset: 2px;
+}
+
+.drag-grip {
+  width: 12px;
+  height: 14px;
+  background: radial-gradient(circle, currentColor 1.35px, transparent 1.6px) 0 0 / 6px 6px;
+}
+
+.editor-section .editor-block-header {
+  grid-template-columns: 24px 20px minmax(0, 1fr);
+  justify-content: initial;
+  gap: 7px;
+}
+
+.editor-section.is-reorder-source .section-drag-handle,
+.editor-entry.is-entry-reorder-source .entry-drag-handle {
+  color: var(--app-primary-active);
+  background: var(--app-primary-soft);
+  cursor: grabbing;
+  opacity: 1;
+}
+
+.entry-document-heading {
+  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 38%) auto;
+}
+
+.entry-delete-action.is-heading-delete {
+  grid-column: 4;
+}
+
+.editor-entry {
+  position: relative;
+  cursor: default;
+}
+
+.entry-drag-handle-generic {
+  position: absolute;
+  top: 3px;
+  left: -2px;
+  opacity: 0.35;
+}
+
+.editor-entry.is-generic {
+  padding-left: 28px;
+}
+
+.editor-entry.is-entry-reorder-source {
+  user-select: none;
+  background: color-mix(in srgb, var(--app-primary-soft) 44%, transparent);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--app-text) 10%, transparent);
+}
+
+.editor-entry.is-entry-reorder-source,
+.editor-entry.is-entry-reorder-source * {
+  cursor: grabbing !important;
+}
+
+.editor-entry.is-entry-drop-before::before,
+.editor-entry.is-entry-drop-after::after {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  left: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--app-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-primary) 12%, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+.editor-entry.is-entry-drop-before::before {
+  top: -1px;
+}
+
+.editor-entry.is-entry-drop-after::after {
+  bottom: -1px;
+}
+
+.editor-section.is-entry-drop-end::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--app-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-primary) 12%, transparent);
+  content: '';
+  pointer-events: none;
+}
+
+.resume-editor.is-entry-drop-unavailable .editor-entry:not(.is-entry-reorder-source) .entry-drag-handle {
+  color: var(--app-text-muted);
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .editor-section .editor-block-header {
+    grid-template-columns: 24px 20px minmax(0, 1fr);
+    gap: 5px;
+  }
+
+  .entry-document-heading {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+
+  .entry-title-display,
+  .entry-meta-display {
+    grid-column: 2;
+  }
+
+  .entry-delete-action.is-heading-delete {
+    grid-column: 3;
+  }
+
+  .editor-entry.is-generic {
+    padding-left: 28px;
   }
 }
 </style>

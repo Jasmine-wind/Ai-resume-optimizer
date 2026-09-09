@@ -69,7 +69,7 @@ class ContextAwareAiGatewayServiceTest {
                 .isEqualTo(AiFailureCode.CREDENTIAL_CHANGED);
         verify(adapter, never()).complete(any());
         verify(credentialService, never()).resolveCurrentSelection(42L);
-        verify(usageRecorder, never()).recordFailure(any(), any(), any(), anyLong(), anyInt());
+        verify(usageRecorder, never()).recordFailure(any(), any(), any(), anyLong(), anyInt(), anyInt());
     }
 
     @Test
@@ -175,7 +175,8 @@ class ContextAwareAiGatewayServiceTest {
                 request());
 
         assertThat(result.text()).isEqualTo("byok ok");
-        assertThat(result.usage().attempts()).isEqualTo(2);
+        assertThat(result.usage().gatewayAttemptCount()).isEqualTo(2);
+        assertThat(result.usage().providerDispatchCount()).isEqualTo(2);
         ArgumentCaptor<AiProviderRequest> requests = ArgumentCaptor.forClass(AiProviderRequest.class);
         verify(adapter, org.mockito.Mockito.times(2)).complete(requests.capture());
         assertThat(requests.getAllValues()).extracting(AiProviderRequest::apiKey)
@@ -204,7 +205,7 @@ class ContextAwareAiGatewayServiceTest {
                 .isEqualTo(AiFailureCode.CONFIGURATION_INVALID);
         verify(adapter, never()).complete(any());
         verify(credentialService, never()).resolveCurrentSelection(anyLong());
-        verify(usageRecorder, never()).recordFailure(any(), any(), any(), anyLong(), anyInt());
+        verify(usageRecorder, never()).recordFailure(any(), any(), any(), anyLong(), anyInt(), anyInt());
     }
 
     @Test
@@ -240,7 +241,87 @@ class ContextAwareAiGatewayServiceTest {
         assertThat(java.time.Duration.ofNanos(System.nanoTime() - startedAt))
                 .isLessThan(java.time.Duration.ofSeconds(1));
         verify(adapter, never()).complete(any());
-        verify(usageRecorder, never()).recordFailure(any(), any(), any(), anyLong(), anyInt());
+        verify(usageRecorder, never()).recordFailure(any(), any(), any(), anyLong(), anyInt(), anyInt());
+    }
+
+    @Test
+    void shouldPropagateActualAdapterDispatchCountToCompletionAndUsageLedger() {
+        AiCredentialService credentialService = mock(AiCredentialService.class);
+        AiProviderAdapter adapter = mock(AiProviderAdapter.class);
+        AiUsageRecorder usageRecorder = mock(AiUsageRecorder.class);
+        ContextAwareAiGatewayService gateway = gateway(
+                credentialService, adapter, usageRecorder, systemProperties());
+        AiSelectionSnapshot selection = byokSelection();
+        when(credentialService.resolveCurrentSelection(42L)).thenReturn(Optional.of(selection));
+        when(credentialService.resolveMaterial(42L, selection))
+                .thenReturn(new DecryptedCredentialMaterial(
+                        "byok-decrypted-key", selection.baseUrl(), selection.model(), selection.configJson(),
+                        selection.credentialId(), selection.credentialRevision()));
+        when(adapter.complete(any(AiProviderRequest.class)))
+                .thenReturn(new AiProviderResponse("ok", 1L, 1L, 3));
+
+        AiCompletionResult result = gateway.complete(
+                AiInvocationContext.user(42L, "TEST_OPERATION", null), request());
+
+        assertThat(result.usage().gatewayAttemptCount()).isEqualTo(1);
+        assertThat(result.usage().providerDispatchCount()).isEqualTo(3);
+        ArgumentCaptor<AiUsageMetrics> usage = ArgumentCaptor.forClass(AiUsageMetrics.class);
+        verify(usageRecorder).recordSuccess(any(), any(), usage.capture());
+        assertThat(usage.getValue().gatewayAttemptCount()).isEqualTo(1);
+        assertThat(usage.getValue().providerDispatchCount()).isEqualTo(3);
+    }
+
+    @Test
+    void outerGatewayRetryKeepsProviderDispatchCountAndPinnedCompatibilityProfile() {
+        AiCredentialService credentialService = mock(AiCredentialService.class);
+        AiProviderAdapter adapter = mock(AiProviderAdapter.class);
+        AiUsageRecorder usageRecorder = mock(AiUsageRecorder.class);
+        ContextAwareAiGatewayService gateway = gateway(
+                credentialService, adapter, usageRecorder, systemProperties());
+        AiSelectionSnapshot selection = byokSelection();
+        when(credentialService.resolveCurrentSelection(42L)).thenReturn(Optional.of(selection));
+        when(credentialService.resolveMaterial(42L, selection))
+                .thenReturn(new DecryptedCredentialMaterial(
+                        "byok-decrypted-key", selection.baseUrl(), selection.model(), selection.configJson(),
+                        selection.credentialId(), selection.credentialRevision()));
+        AiProviderCompatibilityProfile profile = new AiProviderCompatibilityProfile(
+                AiProviderCompatibilityProfile.TokenParameter.MAX_COMPLETION_TOKENS,
+                AiProviderCompatibilityProfile.TemperatureMode.OMIT,
+                AiProviderCompatibilityProfile.ReasoningControl.NONE);
+        when(adapter.complete(any(AiProviderRequest.class)))
+                .thenThrow(new AiGatewayException(
+                        AiFailureCode.RATE_LIMITED, "过于频繁", true, 0L, 3, null)
+                        .withRetryProfile(profile))
+                .thenReturn(new AiProviderResponse("retry ok", null, null, 2));
+
+        AiCompletionResult result = gateway.complete(
+                AiInvocationContext.task(42L, 77L, "TASK_OPERATION", selection), request());
+
+        assertThat(result.usage().gatewayAttemptCount()).isEqualTo(2);
+        assertThat(result.usage().providerDispatchCount()).isEqualTo(5);
+        ArgumentCaptor<AiProviderRequest> requests = ArgumentCaptor.forClass(AiProviderRequest.class);
+        verify(adapter, org.mockito.Mockito.times(2)).complete(requests.capture());
+        assertThat(requests.getAllValues().get(1).compatibilityProfilePinned()).isTrue();
+        assertThat(requests.getAllValues().get(1).compatibilityProfile()).isEqualTo(profile);
+    }
+
+    @Test
+    void credentialTestRequiresFinalSyntheticJsonObject() {
+        AiCredentialService credentialService = mock(AiCredentialService.class);
+        AiProviderAdapter adapter = mock(AiProviderAdapter.class);
+        AiUsageRecorder usageRecorder = mock(AiUsageRecorder.class);
+        ContextAwareAiGatewayService gateway = gateway(
+                credentialService, adapter, usageRecorder, systemProperties());
+        when(adapter.complete(any(AiProviderRequest.class)))
+                .thenReturn(new AiProviderResponse("not-json", null, null));
+
+        AiCredentialTestResult result = gateway.test(
+                42L, "candidate-key", "https://provider.example.com/v1", "candidate-model", java.util.Map.of());
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.failureCode()).isEqualTo(AiFailureCode.PROVIDER_PROTOCOL_INCOMPATIBLE);
+        verify(usageRecorder).recordFailure(any(), any(),
+                org.mockito.ArgumentMatchers.eq(AiFailureCode.PROVIDER_PROTOCOL_INCOMPATIBLE), anyLong(), anyInt(), anyInt());
     }
 
     @Test

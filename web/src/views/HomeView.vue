@@ -187,6 +187,9 @@ const loadResumes = async (preferredResumeId?: number) => {
   loadFailed.value = false
   try {
     resumes.value = await getResumeList()
+    if (!resumes.value.length) {
+      uploadRowVisible.value = true
+    }
     selectedResumeId.value = pickInitialResumeId(
       resumes.value,
       selectedResumeId.value,
@@ -661,13 +664,15 @@ onUnmounted(() => {
             type="button"
             class="home-upload-trigger"
             :disabled="analysisRunning || startingAnalysis"
+            :aria-expanded="uploadRowVisible"
+            aria-controls="home-inline-upload"
             @click="uploadRowVisible = !uploadRowVisible"
           >
-            <span aria-hidden="true">＋</span>
+            <span aria-hidden="true">{{ uploadRowVisible ? '−' : '＋' }}</span>
             {{ uploadRowVisible ? '收起上传' : resumes.length ? '上传一份简历' : '上传第一份简历' }}
           </button>
 
-          <div v-if="!resumes.length || uploadRowVisible" class="home-inline-upload">
+          <div v-if="uploadRowVisible" id="home-inline-upload" class="home-inline-upload">
             <p>支持 PDF、DOC、DOCX，单份最大 10 MB。</p>
             <label class="home-file-picker">
               <span>{{ selectedFile?.name || '选择简历文件' }}</span>

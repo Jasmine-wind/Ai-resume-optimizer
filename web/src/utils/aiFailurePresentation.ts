@@ -6,6 +6,8 @@ const messages: Record<string, string> = {
   TIMEOUT: 'AI 服务响应超时，请稍后重试。',
   PROVIDER_UNAVAILABLE: 'AI 服务暂时不可用，请稍后重试。',
   SCHEMA_INVALID: 'AI 返回内容暂时无法使用，请重新生成。',
+  FINAL_CONTENT_MISSING: '当前模型没有返回可用的最终文本，系统已尝试兼容模式。请在 AI 设置中重新测试当前接口，或更换能够返回最终结果的模型。',
+  PROVIDER_PROTOCOL_INCOMPATIBLE: '当前 AI 接口未能完成兼容的 Chat Completions 调用，请在 AI 设置中重新测试当前接口。',
   REFUSAL: 'AI 未能在当前事实范围内生成建议，可以重新生成或手工编辑。',
   UNSAFE_BASE_URL: 'AI 连接未通过安全检查，请检查 AI 设置或网络环境后重试。',
   RESPONSE_TOO_LARGE: 'AI 返回内容过长，请重新生成。',

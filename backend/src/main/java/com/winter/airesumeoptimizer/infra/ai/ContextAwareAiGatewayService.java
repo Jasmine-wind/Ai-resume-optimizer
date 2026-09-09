@@ -82,6 +82,8 @@ public class ContextAwareAiGatewayService
             throw providerUnavailable();
         }
 
+        int providerDispatches = 0;
+        AiProviderCompatibilityProfile retryProfile = null;
         for (int attempt = 1; attempt <= 2; attempt++) {
             Duration remaining = remaining(deadlineAt);
             if (remaining.isZero() || remaining.isNegative()) {
@@ -90,25 +92,32 @@ public class ContextAwareAiGatewayService
             }
             long attemptStartedAt = System.nanoTime();
             try {
-                AiProviderResponse response = providerAdapter.complete(new AiProviderRequest(
+                AiProviderRequest providerRequest = new AiProviderRequest(
                         material.apiKey(),
                         selection.baseUrl(),
                         selection.model(),
                         generationConfig.temperature(),
                         generationConfig.maxOutputTokens(),
                         perAttemptTimeout(remaining),
-                        messages));
+                        messages);
+                if (retryProfile != null) {
+                    providerRequest = providerRequest.withPinnedCompatibilityProfile(retryProfile);
+                }
+                AiProviderResponse response = providerAdapter.complete(providerRequest);
+                providerDispatches += Math.max(1, response.providerDispatchCount());
                 AiUsageMetrics attemptUsage = new AiUsageMetrics(
                         response.inputTokens(),
                         response.outputTokens(),
                         elapsedMillis(attemptStartedAt),
-                        1);
+                        attempt,
+                        response.providerDispatchCount());
                 recordSuccess(context, selection, attemptUsage);
                 AiUsageMetrics resultUsage = new AiUsageMetrics(
                         response.inputTokens(),
                         response.outputTokens(),
                         elapsedMillis(startedAt),
-                        attempt);
+                        attempt,
+                        providerDispatches);
                 return new AiCompletionResult(
                         response.text(),
                         selection.source(),
@@ -118,14 +127,20 @@ public class ContextAwareAiGatewayService
                         selection.credentialRevision(),
                         resultUsage);
             } catch (AiGatewayException failure) {
-                recordFailure(context, selection, failure, attemptStartedAt, 1);
+                int dispatches = providerDispatchCountForFailure(failure);
+                providerDispatches += dispatches;
+                recordFailure(context, selection, failure, attemptStartedAt, attempt, dispatches);
                 if (!failure.isRetryable() || attempt == 2) {
                     throw failure;
+                }
+                if (failure.getRetryProfile() != null) {
+                    retryProfile = failure.getRetryProfile();
                 }
                 sleepBeforeRetry(Math.min(failure.getRetryAfterMillis(), remaining(deadlineAt).toMillis()));
             } catch (RuntimeException exception) {
                 AiGatewayException safe = providerUnavailable();
-                recordFailure(context, selection, safe, attemptStartedAt, 1);
+                providerDispatches++;
+                recordFailure(context, selection, safe, attemptStartedAt, attempt, 1);
                 throw safe;
             }
         }
@@ -190,8 +205,9 @@ public class ContextAwareAiGatewayService
             context = AiInvocationContext.user(userId, "CREDENTIAL_TEST", selection);
             List<AiChatMessage> messages = providerMessages(new AiGatewayRequest(
                     "CREDENTIAL_TEST",
-                    "只需确认可以处理请求，并输出一个 JSON 对象。",
+                    "这是协议连接测试。不要解释，只输出一个 JSON 对象：{\"ok\":true}",
                     "连接测试"));
+            AiProviderCompatibilityProfile retryProfile = null;
             for (int attempt = 1; attempt <= 2; attempt++) {
                 Duration remaining = remaining(deadlineAt);
                 if (remaining.isZero() || remaining.isNegative()) {
@@ -199,26 +215,33 @@ public class ContextAwareAiGatewayService
                 }
                 long attemptStartedAt = System.nanoTime();
                 try {
-                    AiProviderResponse response = providerAdapter.complete(new AiProviderRequest(
+                    AiProviderRequest providerRequest = new AiProviderRequest(
                             apiKey.strip(),
                             selection.baseUrl(),
                             selection.model(),
                             generationConfig.temperature(),
                             Math.min(256, generationConfig.maxOutputTokens()),
                             perAttemptTimeout(remaining),
-                            messages));
+                            messages);
+                    if (retryProfile != null) {
+                        providerRequest = providerRequest.withPinnedCompatibilityProfile(retryProfile);
+                    }
+                    AiProviderResponse response = providerAdapter.complete(providerRequest);
+                    validateConnectionProbe(response.text());
                     recordSuccess(context, selection, new AiUsageMetrics(
                             response.inputTokens(),
                             response.outputTokens(),
                             elapsedMillis(attemptStartedAt),
-                            1));
+                            attempt,
+                            response.providerDispatchCount()));
                     return new AiCredentialTestResult(
                             true,
                             null,
-                            "AI Provider 连接测试成功",
+                            "AI Provider Chat Completions 协议与最终 JSON 输出测试成功",
                             normalizedModel);
                 } catch (AiGatewayException failure) {
-                    recordFailure(context, selection, failure, attemptStartedAt, 1);
+                    recordFailure(context, selection, failure, attemptStartedAt, attempt,
+                            providerDispatchCountForFailure(failure));
                     if (!failure.isRetryable() || attempt == 2) {
                         return new AiCredentialTestResult(
                                 false,
@@ -226,10 +249,13 @@ public class ContextAwareAiGatewayService
                                 failure.getMessage(),
                                 normalizedModel);
                     }
+                    if (failure.getRetryProfile() != null) {
+                        retryProfile = failure.getRetryProfile();
+                    }
                     sleepBeforeRetry(Math.min(failure.getRetryAfterMillis(), remaining(deadlineAt).toMillis()));
                 } catch (RuntimeException exception) {
                     AiGatewayException safe = providerUnavailable();
-                    recordFailure(context, selection, safe, attemptStartedAt, 1);
+                    recordFailure(context, selection, safe, attemptStartedAt, attempt, 1);
                     return new AiCredentialTestResult(
                             false,
                             safe.getFailureCode(),
@@ -327,6 +353,37 @@ public class ContextAwareAiGatewayService
         return configured.compareTo(remaining) < 0 ? configured : remaining;
     }
 
+    private void validateConnectionProbe(String text) {
+        try {
+            String candidate = text == null ? "" : text.strip();
+            if (candidate.startsWith("```") && candidate.endsWith("```")) {
+                int newline = candidate.indexOf('\n');
+                candidate = newline >= 0
+                        ? candidate.substring(newline + 1, candidate.length() - 3).strip()
+                        : candidate.substring(3, candidate.length() - 3).strip();
+            }
+            int firstObject = candidate.indexOf('{');
+            int lastObject = candidate.lastIndexOf('}');
+            if (firstObject < 0 || lastObject <= firstObject) {
+                throw new IllegalArgumentException();
+            }
+            var root = objectMapper.readTree(candidate.substring(firstObject, lastObject + 1));
+            if (!root.isObject() || !root.path("ok").isBoolean() || !root.path("ok").asBoolean()) {
+                throw new IllegalArgumentException();
+            }
+        } catch (Exception exception) {
+            throw new AiGatewayException(
+                    AiFailureCode.PROVIDER_PROTOCOL_INCOMPATIBLE,
+                    "AI Provider 未返回连接测试要求的最终 JSON");
+        }
+    }
+
+    private int providerDispatchCountForFailure(AiGatewayException failure) {
+        // Adapter protocol failures carry the exact count. A legacy/test adapter
+        // that throws a plain exception still represents one attempted dispatch.
+        return failure.getProviderDispatchCount() > 0 ? failure.getProviderDispatchCount() : 1;
+    }
+
     private AiGatewayException providerUnavailable() {
         return new AiGatewayException(AiFailureCode.PROVIDER_UNAVAILABLE, "AI Provider 调用失败");
     }
@@ -361,14 +418,16 @@ public class ContextAwareAiGatewayService
             AiSelectionSnapshot selection,
             AiGatewayException failure,
             long startedAt,
-            int attempts) {
+            int gatewayAttemptCount,
+            int providerDispatchCount) {
         try {
             usageRecorder.recordFailure(
                     context,
                     selection,
                     failure.getFailureCode(),
                     elapsedMillis(startedAt),
-                    Math.max(1, attempts));
+                    Math.max(1, gatewayAttemptCount),
+                    Math.max(1, providerDispatchCount));
         } catch (RuntimeException ignored) {
             // Ledger availability must never change an AI result.
         }

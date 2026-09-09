@@ -44,7 +44,7 @@ public interface ProductObservabilityMapper {
                   ON first_success.user_id = first_task.user_id
                 WHERE first_success.finished_at >= #{fromInclusive} AND first_success.finished_at < #{toExclusive}
               ), 0) AS average_first_successful_analysis_ms,
-              (SELECT COUNT(*) FROM ai_usage_records
+              (SELECT COALESCE(SUM(provider_dispatch_count), 0) FROM ai_usage_records
                 WHERE created_at >= #{fromInclusive} AND created_at < #{toExclusive}) AS provider_attempts,
               (SELECT COUNT(*) FROM ai_usage_records
                 WHERE outcome = 'FAILURE' AND created_at >= #{fromInclusive} AND created_at < #{toExclusive}) AS provider_failures,

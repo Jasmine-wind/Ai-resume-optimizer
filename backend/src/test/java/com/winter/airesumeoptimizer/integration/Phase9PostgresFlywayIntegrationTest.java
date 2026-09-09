@@ -103,7 +103,13 @@ class Phase9PostgresFlywayIntegrationTest {
 
     @Test
     void freshFlywaySchemaEnforcesOwnershipAndDerivesInsightWithoutPersistedAggregate() {
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("25");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("26");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'ai_usage_records' AND column_name IN ('gateway_attempt_count', 'provider_dispatch_count') AND is_nullable = 'NO' AND column_default = '1'",
+                Integer.class)).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid WHERE t.relname = 'ai_usage_records' AND c.conname IN ('ck_ai_usage_records_gateway_attempt_count_positive', 'ck_ai_usage_records_dispatch_count_positive')",
+                Integer.class)).isEqualTo(2);
         User owner = user("integration-owner");
         User other = user("integration-other");
         Resume resume = resume(owner.getId());
@@ -249,7 +255,7 @@ class Phase9PostgresFlywayIntegrationTest {
                     .load();
             upgraded.migrate();
 
-            assertThat(upgraded.info().current().getVersion().getVersion()).isEqualTo("25");
+            assertThat(upgraded.info().current().getVersion().getVersion()).isEqualTo("26");
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'resumes' AND column_name = 'display_name'",
                     Integer.class,
@@ -269,6 +275,14 @@ class Phase9PostgresFlywayIntegrationTest {
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'ai_usage_records'",
                     Integer.class,
                     schema)).isEqualTo(1);
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'ai_usage_records' AND column_name IN ('gateway_attempt_count', 'provider_dispatch_count') AND is_nullable = 'NO' AND column_default = '1'",
+                    Integer.class,
+                    schema)).isEqualTo(2);
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid JOIN pg_namespace n ON n.oid = t.relnamespace WHERE n.nspname = ? AND t.relname = 'ai_usage_records' AND c.conname IN ('ck_ai_usage_records_gateway_attempt_count_positive', 'ck_ai_usage_records_dispatch_count_positive')",
+                    Integer.class,
+                    schema)).isEqualTo(2);
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'resume_parse_results' AND column_name = 'canonical_source_version_id'",
                     Integer.class,
@@ -368,6 +382,7 @@ class Phase9PostgresFlywayIntegrationTest {
             status.setRollbackOnly();
         });
         assertThat(usageRecordMapper.selectById(record.getId())).isNotNull();
+        assertThat(usageRecordMapper.selectById(record.getId()).getProviderDispatchCount()).isEqualTo(1);
 
         AiUsageRecord expired = new AiUsageRecord();
         expired.setUserId(owner.getId());

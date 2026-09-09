@@ -27,5 +27,7 @@ public class AiUsageRecord {
     private Integer promptTokens;
     private Integer completionTokens;
     private Integer totalTokens;
+    private Integer gatewayAttemptCount;
+    private Integer providerDispatchCount;
     private LocalDateTime createdAt;
 }

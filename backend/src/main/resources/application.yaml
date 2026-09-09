@@ -88,11 +88,6 @@ app:
   resume:
     upload:
       max-file-size-bytes: 10485760
-  render:
-    typst-binary: ${APP_RENDER_TYPST_BINARY:typst}
-    timeout: ${APP_RENDER_TIMEOUT:30s}
-    font-path: ${APP_RENDER_FONT_PATH:}
-    preview-receipt-ttl: ${APP_RENDER_PREVIEW_RECEIPT_TTL:10m}
     parse:
       mode: ${RESUME_PARSE_MODE:BALANCED}
       ai-section-classify-enabled: ${RESUME_PARSE_AI_SECTION_CLASSIFY_ENABLED:true}
@@ -100,6 +95,11 @@ app:
       ai-structured-parse-enabled: ${RESUME_PARSE_AI_STRUCTURED_PARSE_ENABLED:false}
       ai-max-blocks: ${RESUME_PARSE_AI_MAX_BLOCKS:80}
       ai-section-classify-batch-max-chars: ${RESUME_PARSE_AI_SECTION_CLASSIFY_BATCH_MAX_CHARS:6000}
+  render:
+    typst-binary: ${APP_RENDER_TYPST_BINARY:typst}
+    timeout: ${APP_RENDER_TIMEOUT:30s}
+    font-path: ${APP_RENDER_FONT_PATH:}
+    preview-receipt-ttl: ${APP_RENDER_PREVIEW_RECEIPT_TTL:10m}
   ai:
     openai-compatible:
       api-key: ${spring.ai.openai.api-key}

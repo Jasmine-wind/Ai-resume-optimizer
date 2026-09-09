@@ -14,5 +14,15 @@ public interface AiUsageRecorder {
             AiSelectionSnapshot selection,
             AiFailureCode failureCode,
             long latencyMs,
-            int attempts);
+            int providerDispatchCount);
+
+    default void recordFailure(
+            AiInvocationContext context,
+            AiSelectionSnapshot selection,
+            AiFailureCode failureCode,
+            long latencyMs,
+            int gatewayAttemptCount,
+            int providerDispatchCount) {
+        recordFailure(context, selection, failureCode, latencyMs, providerDispatchCount);
+    }
 }

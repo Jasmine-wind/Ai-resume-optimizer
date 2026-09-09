@@ -83,6 +83,7 @@ public class ResumeAiSectionClassifierImpl implements ResumeAiSectionClassifier 
             Boolean enabledOverride,
             AiSelectionSnapshot selection) {
         long startedAt = System.nanoTime();
+        boolean failClosedOnProviderFailure = selection != null && selection.isUserByok();
         boolean enabled = enabledOverride == null ? properties.aiSectionClassifyEnabled() : Boolean.TRUE.equals(enabledOverride);
         if (!enabled) {
             return disabled("AI_SECTION_CLASSIFY_DISABLED", startedAt);
@@ -173,7 +174,7 @@ public class ResumeAiSectionClassifierImpl implements ResumeAiSectionClassifier 
                     .classifications(classifications)
                     .build();
         } catch (RuntimeException exception) {
-            if (selection != null && selection.isUserByok()) {
+            if (failClosedOnProviderFailure) {
                 if (exception instanceof AiGatewayException gatewayException) {
                     throw gatewayException;
                 }

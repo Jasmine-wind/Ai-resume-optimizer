@@ -22,7 +22,8 @@ public class AiUsageRecorderImpl implements AiUsageRecorder {
 
     @Override
     public void recordSuccess(AiInvocationContext context, AiSelectionSnapshot selection, AiUsageMetrics usage) {
-        insert(context, selection, "SUCCESS", null, usage.latencyMs(), usage.inputTokens(), usage.outputTokens());
+        insert(context, selection, "SUCCESS", null, usage.latencyMs(), usage.inputTokens(), usage.outputTokens(),
+                usage.gatewayAttemptCount(), usage.providerDispatchCount());
     }
 
     @Override
@@ -31,8 +32,20 @@ public class AiUsageRecorderImpl implements AiUsageRecorder {
             AiSelectionSnapshot selection,
             AiFailureCode failureCode,
             long latencyMs,
-            int attempts) {
-        insert(context, selection, "FAILURE", failureCode, latencyMs, null, null);
+            int providerDispatchCount) {
+        recordFailure(context, selection, failureCode, latencyMs, 1, providerDispatchCount);
+    }
+
+    @Override
+    public void recordFailure(
+            AiInvocationContext context,
+            AiSelectionSnapshot selection,
+            AiFailureCode failureCode,
+            long latencyMs,
+            int gatewayAttemptCount,
+            int providerDispatchCount) {
+        insert(context, selection, "FAILURE", failureCode, latencyMs, null, null,
+                gatewayAttemptCount, providerDispatchCount);
     }
 
     private void insert(
@@ -42,7 +55,9 @@ public class AiUsageRecorderImpl implements AiUsageRecorder {
             AiFailureCode failureCode,
             long latencyMs,
             Long promptTokens,
-            Long completionTokens) {
+            Long completionTokens,
+            int gatewayAttemptCount,
+            int providerDispatchCount) {
         AiUsageRecord record = new AiUsageRecord();
         record.setUserId(context.userId());
         record.setOptimizationTaskId(context.taskId());
@@ -57,6 +72,8 @@ public class AiUsageRecorderImpl implements AiUsageRecorder {
         record.setPromptTokens(toInt(promptTokens));
         record.setCompletionTokens(toInt(completionTokens));
         record.setTotalTokens(sum(promptTokens, completionTokens));
+        record.setGatewayAttemptCount(Math.max(1, gatewayAttemptCount));
+        record.setProviderDispatchCount(Math.max(1, providerDispatchCount));
         record.setCreatedAt(LocalDateTime.now());
         usageRecordPersistence.persist(record);
     }

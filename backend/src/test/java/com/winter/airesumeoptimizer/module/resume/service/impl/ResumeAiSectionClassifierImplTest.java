@@ -1,6 +1,7 @@
 package com.winter.airesumeoptimizer.module.resume.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -10,6 +11,11 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.winter.airesumeoptimizer.infra.ai.AiClientService;
+import com.winter.airesumeoptimizer.infra.ai.AiFailureCode;
+import com.winter.airesumeoptimizer.infra.ai.AiGateway;
+import com.winter.airesumeoptimizer.infra.ai.AiGatewayException;
+import com.winter.airesumeoptimizer.infra.ai.AiSelectionSnapshot;
+import com.winter.airesumeoptimizer.infra.ai.AiSource;
 import com.winter.airesumeoptimizer.module.resume.config.ResumeParseProperties;
 import com.winter.airesumeoptimizer.module.resume.dto.ResumeBlockDTO;
 import java.util.List;
@@ -172,6 +178,35 @@ class ResumeAiSectionClassifierImplTest {
 
         assertThat(result.shouldApply()).isFalse();
         assertThat(result.getDurationMs()).isNotNull();
+        assertThat(result.getFallbackReason()).contains("AI 章节归类失败");
+    }
+
+    @Test
+    void standalonePreparationShouldFallbackWhenResolvedByokTimesOut() {
+        properties.setAiSectionClassifyEnabled(true);
+        AiGateway gateway = mock(AiGateway.class);
+        AiSelectionSnapshot selection = new AiSelectionSnapshot(
+                AiSource.USER_BYOK,
+                AiSelectionSnapshot.OPENAI_COMPATIBLE,
+                77L,
+                5L,
+                "https://provider.example.com:443/v1",
+                "byok-model",
+                "{}",
+                null);
+        when(gateway.selectionForNewTask(1L)).thenReturn(selection);
+        when(gateway.complete(any(), any()))
+                .thenThrow(new AiGatewayException(AiFailureCode.TIMEOUT, "AI Provider 请求超时"));
+        ResumeAiSectionClassifierImpl standaloneService = new ResumeAiSectionClassifierImpl(
+                properties,
+                new ResumeSectionClassifyPromptServiceImpl(new ObjectMapper()),
+                gateway,
+                new ObjectMapper());
+
+        var result = standaloneService.classify(1L, 100L, blocks(), true, null);
+
+        assertThat(result.shouldApply()).isFalse();
+        assertThat(result.getFallbackOccurred()).isTrue();
         assertThat(result.getFallbackReason()).contains("AI 章节归类失败");
     }
 

@@ -32,7 +32,7 @@ class AiUsageRecorderImplTest {
                 null);
         AiInvocationContext context = AiInvocationContext.task(42L, 55L, "BULLET_REWRITE", selection);
 
-        recorder.recordSuccess(context, selection, new AiUsageMetrics(11L, 22L, 123L, 1));
+        recorder.recordSuccess(context, selection, new AiUsageMetrics(11L, 22L, 123L, 2, 5));
 
         AiUsageRecord record = captureInsertedRecord();
         assertThat(record.getUserId()).isEqualTo(42L);
@@ -48,6 +48,8 @@ class AiUsageRecorderImplTest {
         assertThat(record.getPromptTokens()).isEqualTo(11);
         assertThat(record.getCompletionTokens()).isEqualTo(22);
         assertThat(record.getTotalTokens()).isEqualTo(33);
+        assertThat(record.getGatewayAttemptCount()).isEqualTo(2);
+        assertThat(record.getProviderDispatchCount()).isEqualTo(5);
     }
 
     @Test
@@ -74,6 +76,8 @@ class AiUsageRecorderImplTest {
         assertThat(record.getTotalTokens()).isNull();
         assertThat(record.getSource()).isEqualTo("SYSTEM_DEFAULT");
         assertThat(record.getCredentialRevision()).isNull();
+        assertThat(record.getGatewayAttemptCount()).isEqualTo(1);
+        assertThat(record.getProviderDispatchCount()).isEqualTo(1);
     }
 
     @Test

@@ -79,9 +79,20 @@ public class OpenAiCompatibleAiClientService implements AiProviderAdapter {
             JsonNode choiceNode = root.path("choices").path(0);
             JsonNode messageNode = choiceNode.path("message");
             String content = readMessageContent(messageNode);
+            // A few gateways return a legacy completion-shaped choice even on the
+            // chat endpoint. It is still validated by the downstream JSON/parser
+            // contracts, so accepting this text does not make provider data trusted.
+            if (content.isBlank() && choiceNode.path("text").isTextual()) {
+                content = choiceNode.path("text").asText();
+            }
             if (content.isBlank()) {
                 if (!messageNode.path("refusal").asText("").isBlank()) {
                     throw new AiGatewayException(AiFailureCode.REFUSAL, "AI Provider 拒绝生成此内容");
+                }
+                if (!messageNode.path("reasoning_content").asText("").isBlank()) {
+                    throw new AiGatewayException(
+                            AiFailureCode.SCHEMA_INVALID,
+                            "AI Provider 只返回了推理内容，没有返回最终文本；请改用支持 Chat Completions 文本输出的模型");
                 }
                 if ("length".equals(choiceNode.path("finish_reason").asText(""))) {
                     throw new AiGatewayException(
@@ -165,10 +176,23 @@ public class OpenAiCompatibleAiClientService implements AiProviderAdapter {
         if (contentNode.isTextual()) {
             return contentNode.asText();
         }
+        if (contentNode.isObject()) {
+            JsonNode textNode = contentNode.path("text");
+            if (textNode.isTextual()) {
+                return textNode.asText();
+            }
+            JsonNode valueNode = contentNode.path("value");
+            if (valueNode.isTextual()) {
+                return valueNode.asText();
+            }
+        }
         if (contentNode.isArray()) {
             StringBuilder result = new StringBuilder();
             for (JsonNode item : contentNode) {
                 JsonNode textNode = item.path("text");
+                if (!textNode.isTextual()) {
+                    textNode = item.path("content");
+                }
                 if (textNode.isTextual() && !textNode.asText().isBlank()) {
                     if (!result.isEmpty()) {
                         result.append('\n');

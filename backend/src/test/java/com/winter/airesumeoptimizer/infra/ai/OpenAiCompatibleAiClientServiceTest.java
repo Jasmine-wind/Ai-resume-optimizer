@@ -48,6 +48,27 @@ class OpenAiCompatibleAiClientServiceTest {
     }
 
     @Test
+    void extractContentShouldReadLegacyChoiceTextWhenChatMessageContentIsMissing() {
+        OpenAiCompatibleAiClientService service = new OpenAiCompatibleAiClientService(new ObjectMapper());
+
+        assertThat(service.extractContent("""
+                {"choices":[{"text":"兼容的文本内容","message":{}}]}
+                """))
+                .isEqualTo("兼容的文本内容");
+    }
+
+    @Test
+    void extractContentShouldExplainReasoningOnlyResponses() {
+        OpenAiCompatibleAiClientService service = new OpenAiCompatibleAiClientService(new ObjectMapper());
+
+        assertThatThrownBy(() -> service.extractContent("""
+                {"choices":[{"finish_reason":"stop","message":{"content":null,"reasoning_content":"只返回了推理过程"}}]}
+                """))
+                .isInstanceOf(AiClientException.class)
+                .hasMessage("AI Provider 只返回了推理内容，没有返回最终文本；请改用支持 Chat Completions 文本输出的模型");
+    }
+
+    @Test
     void completeShouldRejectMissingApiKey() {
         OpenAiCompatibleAiClientService service = new OpenAiCompatibleAiClientService(new ObjectMapper());
 

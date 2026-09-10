@@ -123,6 +123,33 @@ class OpenAiCompatibleAiClientServiceTest {
     }
 
     @Test
+    void completeShouldUseOmitProfileAfterTemperatureAndBothTokenNamesAreRejected() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        PinnedHttpTransport transport = mock(PinnedHttpTransport.class);
+        when(transport.execute(any(OutboundRequest.class)))
+                .thenReturn(unsupported("temperature"))
+                .thenReturn(unsupported("max_tokens"))
+                .thenReturn(unsupported("max_completion_tokens"))
+                .thenReturn(success("omit-success"));
+        OpenAiCompatibleAiClientService service = new OpenAiCompatibleAiClientService(objectMapper, transport);
+
+        AiProviderResponse response = service.complete(providerRequest("key-omit-after-three-rejections", "model-omit"));
+
+        assertThat(response.text()).isEqualTo("omit-success");
+        assertThat(response.providerDispatchCount()).isEqualTo(4);
+        List<JsonNode> bodies = capturedBodies(transport, objectMapper);
+        assertThat(bodies.get(0).has("temperature")).isTrue();
+        assertThat(bodies.get(0).has("max_tokens")).isTrue();
+        assertThat(bodies.get(1).has("temperature")).isFalse();
+        assertThat(bodies.get(1).has("max_tokens")).isTrue();
+        assertThat(bodies.get(2).has("temperature")).isFalse();
+        assertThat(bodies.get(2).has("max_completion_tokens")).isTrue();
+        assertThat(bodies.get(3).has("temperature")).isFalse();
+        assertThat(bodies.get(3).has("max_tokens")).isFalse();
+        assertThat(bodies.get(3).has("max_completion_tokens")).isFalse();
+    }
+
+    @Test
     void completeShouldOmitTokenParameterOnlyAfterBothTokenNamesAreExplicitlyRejected() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         PinnedHttpTransport transport = mock(PinnedHttpTransport.class);
@@ -224,7 +251,7 @@ class OpenAiCompatibleAiClientServiceTest {
     }
 
     @Test
-    void cachedProfileRecoveryIsBoundedToOneCachedDispatchPlusThreeBaseAndThreeReasoningDispatches() {
+    void cachedProfileRecoveryIsBoundedToOneCachedDispatchPlusFourBaseAndThreeReasoningDispatches() {
         PinnedHttpTransport transport = mock(PinnedHttpTransport.class);
         when(transport.execute(any(OutboundRequest.class)))
                 .thenReturn(reasoningOnly("warm-reasoning"))
@@ -232,6 +259,7 @@ class OpenAiCompatibleAiClientServiceTest {
                 .thenReturn(unsupported("thinking"))
                 .thenReturn(unsupported("max_tokens"))
                 .thenReturn(unsupported("temperature"))
+                .thenReturn(unsupported("max_completion_tokens"))
                 .thenReturn(reasoningOnly("base-reasoning"))
                 .thenReturn(reasoningOnly("control-a"))
                 .thenReturn(reasoningOnly("control-b"))
@@ -245,9 +273,9 @@ class OpenAiCompatibleAiClientServiceTest {
                 .satisfies(failure -> {
                     AiGatewayException exception = (AiGatewayException) failure;
                     assertThat(exception.getFailureCode()).isEqualTo(AiFailureCode.FINAL_CONTENT_MISSING);
-                    assertThat(exception.getProviderDispatchCount()).isEqualTo(7);
+                    assertThat(exception.getProviderDispatchCount()).isEqualTo(8);
                 });
-        verify(transport, times(9)).execute(any());
+        verify(transport, times(10)).execute(any());
     }
 
     @Test

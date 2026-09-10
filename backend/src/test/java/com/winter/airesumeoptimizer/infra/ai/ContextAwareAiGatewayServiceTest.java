@@ -306,6 +306,31 @@ class ContextAwareAiGatewayServiceTest {
     }
 
     @Test
+    void credentialTestCapsProbeOutputAt1024WithoutRaisingSmallConfiguredBudget() {
+        AiCredentialService credentialService = mock(AiCredentialService.class);
+        AiProviderAdapter adapter = mock(AiProviderAdapter.class);
+        AiUsageRecorder usageRecorder = mock(AiUsageRecorder.class);
+        ContextAwareAiGatewayService gateway = gateway(
+                credentialService, adapter, usageRecorder, systemProperties());
+        when(adapter.complete(any(AiProviderRequest.class)))
+                .thenReturn(new AiProviderResponse("{\"ok\":true}", null, null));
+
+        AiCredentialTestResult large = gateway.test(
+                42L, "candidate-key", "https://provider.example.com/v1", "candidate-model",
+                java.util.Map.of("maxOutputTokens", 16000));
+        AiCredentialTestResult small = gateway.test(
+                42L, "candidate-key", "https://provider.example.com/v1", "candidate-model",
+                java.util.Map.of("maxOutputTokens", 500));
+
+        assertThat(large.success()).isTrue();
+        assertThat(small.success()).isTrue();
+        ArgumentCaptor<AiProviderRequest> requests = ArgumentCaptor.forClass(AiProviderRequest.class);
+        verify(adapter, org.mockito.Mockito.times(2)).complete(requests.capture());
+        assertThat(requests.getAllValues()).extracting(AiProviderRequest::maxTokens)
+                .containsExactly(1024, 500);
+    }
+
+    @Test
     void credentialTestRequiresFinalSyntheticJsonObject() {
         AiCredentialService credentialService = mock(AiCredentialService.class);
         AiProviderAdapter adapter = mock(AiProviderAdapter.class);

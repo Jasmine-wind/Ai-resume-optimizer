@@ -220,7 +220,7 @@ public class ContextAwareAiGatewayService
                             selection.baseUrl(),
                             selection.model(),
                             generationConfig.temperature(),
-                            Math.min(256, generationConfig.maxOutputTokens()),
+                            Math.min(1024, generationConfig.maxOutputTokens()),
                             perAttemptTimeout(remaining),
                             messages);
                     if (retryProfile != null) {

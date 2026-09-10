@@ -232,8 +232,14 @@ test.describe('AI settings', () => {
     await page.getByLabel('连接地址').fill('https://api.example.com/v1')
     await page.getByLabel('API 密钥').fill('secret-key')
     await page.getByLabel('模型').fill('polish-model')
+    await expect(page.getByRole('button', { name: '保存配置' })).toBeDisabled()
     await page.getByRole('button', { name: '测试连接' }).click()
     await expect(page.getByLabel('API 密钥')).toHaveValue('secret-key')
+    await expect(page.getByRole('button', { name: '保存并替换' })).toBeEnabled()
+    await page.getByLabel('模型').fill('polish-model-updated')
+    await expect(page.getByRole('button', { name: '保存并替换' })).toBeDisabled()
+    await page.getByRole('button', { name: '测试连接' }).click()
+    await expect(page.getByRole('button', { name: '保存并替换' })).toBeEnabled()
     await page.getByRole('button', { name: /保存/ }).click()
     await expect(page.getByText('配置已保存，尚未启用')).toBeVisible()
     await expect(page.getByText('启用后，新任务才能使用你的 API。')).toBeVisible()
@@ -254,7 +260,13 @@ test.describe('AI settings', () => {
 
   test('keeps test and save failures in the page for a recoverable retry', async ({ page }) => {
     await page.route('**/api/settings/ai-provider', (route) => route.fulfill(result(credential('DISABLED', false, true, true))))
-    await page.route('**/api/settings/ai-provider/test', (route) => route.fulfill(result({ success: false, message: '连接没有通过' })))
+    let testAttempts = 0
+    await page.route('**/api/settings/ai-provider/test', (route) => {
+      testAttempts += 1
+      return route.fulfill(result(testAttempts === 1
+        ? { success: false, message: '连接没有通过' }
+        : { success: true, message: '连接正常' }))
+    })
     await page.route('**/api/settings/ai-provider', async (route) => {
       if (route.request().method() === 'PUT') {
         await route.fulfill({
@@ -273,6 +285,9 @@ test.describe('AI settings', () => {
     await page.getByRole('button', { name: '测试连接' }).click()
     await expect(page.getByText('连接测试失败', { exact: true })).toBeVisible()
     await expect(page.getByLabel('API 密钥')).toHaveValue('secret-key')
+    await expect(page.getByRole('button', { name: '保存配置' })).toBeDisabled()
+    await page.getByRole('button', { name: '测试连接' }).click()
+    await expect(page.getByRole('button', { name: '保存配置' })).toBeEnabled()
     await page.getByRole('button', { name: '保存配置' }).click()
     await expect(page.getByText('保存配置失败', { exact: true })).toBeVisible()
     await expect(page.locator('.settings-configuration').getByText('服务器暂时无法处理请求，请稍后重试', { exact: true })).toBeVisible()

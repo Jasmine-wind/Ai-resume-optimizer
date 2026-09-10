@@ -32,7 +32,7 @@ public class OpenAiCompatibleAiClientService implements AiProviderAdapter {
     private static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
     private static final int CACHE_CAPACITY = 256;
     private static final long CACHE_TTL_MILLIS = Duration.ofHours(12).toMillis();
-    private static final int MAX_BASE_DIALECT_ATTEMPTS = 3;
+    private static final int MAX_BASE_DIALECT_ATTEMPTS = 4;
     private static final int MAX_REASONING_ATTEMPTS = 3;
 
     private final ObjectMapper objectMapper;

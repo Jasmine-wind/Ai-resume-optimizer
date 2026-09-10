@@ -47,7 +47,11 @@ const configurationState = computed<AiProviderConfigurationState>(() =>
     : 'UNCONFIGURED',
 )
 const canTest = computed(() => Boolean(form.baseUrl.trim() && form.apiKey.trim() && form.model.trim()))
-const canSubmit = computed(() => Boolean(storageAvailable.value && canTest.value))
+const canSubmit = computed(() => Boolean(
+  storageAvailable.value
+    && canTest.value
+    && testResult.value?.success === true,
+))
 const currentAiDescription = computed(() => {
   switch (configurationState.value) {
     case 'ACTIVE':

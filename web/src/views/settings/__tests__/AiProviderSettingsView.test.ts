@@ -8,6 +8,7 @@ import {
   disableAiProvider,
   enableAiProvider,
   getAiProviderSettings,
+  saveAiProviderSettings,
   testAiProvider,
 } from '@/api/ai-provider'
 import type { AiProviderCredential } from '@/api/ai-provider'
@@ -67,6 +68,7 @@ const enableMock = vi.mocked(enableAiProvider)
 const disableMock = vi.mocked(disableAiProvider)
 const deleteMock = vi.mocked(deleteAiProvider)
 const testMock = vi.mocked(testAiProvider)
+const saveMock = vi.mocked(saveAiProviderSettings)
 
 const credential = (
   status: 'ACTIVE' | 'DISABLED',
@@ -99,6 +101,14 @@ const mountLoaded = async (settings: AiProviderCredential) => {
 
 const button = (wrapper: Awaited<ReturnType<typeof mountLoaded>>, text: string) =>
   wrapper.findAll('button').find((item) => item.text().includes(text))!
+
+const fillForm = async (wrapper: Awaited<ReturnType<typeof mountLoaded>>) => {
+  const inputs = wrapper.findAll('input')
+  await inputs[0]!.setValue('https://api.example.com/v1')
+  await inputs[1]!.setValue('secret-key')
+  await inputs[2]!.setValue('test-model')
+  return inputs
+}
 
 describe('AiProviderSettingsView', () => {
   beforeEach(() => {
@@ -160,6 +170,70 @@ describe('AiProviderSettingsView', () => {
     await flushPromises()
     expect(enableMock).toHaveBeenCalledOnce()
     expect(messageSuccess).toHaveBeenCalledWith('已启用你的 API 密钥')
+  })
+
+  it('keeps Save disabled until a complete form has passed Test', async () => {
+    const wrapper = await mountLoaded(credential('DISABLED', false))
+    await fillForm(wrapper)
+
+    expect(button(wrapper, '保存配置').element.disabled).toBe(true)
+  })
+
+  it('keeps Save disabled after a failed Test', async () => {
+    testMock.mockResolvedValue({ success: false, message: '连接失败', failureCode: 'TIMEOUT' })
+    const wrapper = await mountLoaded(credential('DISABLED', false))
+    await fillForm(wrapper)
+
+    await button(wrapper, '测试连接').trigger('click')
+    await flushPromises()
+
+    expect(button(wrapper, '保存配置').element.disabled).toBe(true)
+  })
+
+  it('enables Save only after a successful Test', async () => {
+    testMock.mockResolvedValue({ success: true, message: '连接正常' })
+    const wrapper = await mountLoaded(credential('DISABLED', false))
+    await fillForm(wrapper)
+
+    await button(wrapper, '测试连接').trigger('click')
+    await flushPromises()
+
+    expect(button(wrapper, '保存配置').element.disabled).toBe(false)
+  })
+
+  it.each([
+    ['base URL', 0, 'https://api.example.com/other'],
+    ['API key', 1, 'another-secret'],
+    ['model', 2, 'another-model'],
+  ])('invalidates a successful Test after changing %s', async (_field, index, value) => {
+    testMock.mockResolvedValue({ success: true, message: '连接正常' })
+    const wrapper = await mountLoaded(credential('DISABLED', false))
+    const inputs = await fillForm(wrapper)
+
+    await button(wrapper, '测试连接').trigger('click')
+    await flushPromises()
+    expect(button(wrapper, '保存配置').element.disabled).toBe(false)
+
+    await inputs[index]!.setValue(value)
+
+    expect(button(wrapper, '保存配置').element.disabled).toBe(true)
+  })
+
+  it('re-enables Save when the changed form passes Test again', async () => {
+    testMock.mockResolvedValue({ success: true, message: '连接正常' })
+    const wrapper = await mountLoaded(credential('DISABLED', false))
+    const inputs = await fillForm(wrapper)
+
+    await button(wrapper, '测试连接').trigger('click')
+    await flushPromises()
+    await inputs[2]!.setValue('another-model')
+    expect(button(wrapper, '保存配置').element.disabled).toBe(true)
+
+    await button(wrapper, '测试连接').trigger('click')
+    await flushPromises()
+
+    expect(button(wrapper, '保存配置').element.disabled).toBe(false)
+    expect(saveMock).not.toHaveBeenCalled()
   })
 
   it('allows Test but fail-closed disables Save when storage is unavailable', async () => {
